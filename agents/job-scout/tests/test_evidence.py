@@ -141,6 +141,38 @@ def test_approval_destination_is_one_reserved_path_only(tmp_path: Path) -> None:
             approve_evidence_pack(loaded, destination, NOW)
 
 
+def test_approval_rejects_swapped_foreign_workspace_before_write(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import hermes_job_scout.workspace as workspace_module
+
+    paths = WorkspacePaths.from_root(tmp_path / "Career")
+    foreign = WorkspacePaths.from_root(tmp_path / "Foreign")
+    bootstrap_private_workspace(paths)
+    bootstrap_private_workspace(foreign)
+    pack_path = paths.master / "candidate-facts-private.md"
+    atomic_write_private(pack_path, _markdown(_profile()).encode("utf-8"))
+    loaded = load_evidence_pack(pack_path)
+    real_root = paths.root.with_name("career-real")
+    original = workspace_module._open_directory_from_raw
+    swapped = False
+
+    def swap(parent_fd: int, name: str) -> int:
+        nonlocal swapped
+        if name == paths.root.name and not swapped:
+            paths.root.rename(real_root)
+            foreign.root.rename(paths.root)
+            swapped = True
+        return original(parent_fd, name)
+
+    monkeypatch.setattr(workspace_module, "_open_directory_from_raw", swap)
+    with pytest.raises(EvidenceApprovalError):
+        approve_evidence_pack(loaded, paths.master / "evidence-approval.json", NOW)
+    paths.root.rename(foreign.root)
+    real_root.rename(paths.root)
+    assert not (paths.master / "evidence-approval.json").exists()
+
+
 def test_evidence_requires_exactly_one_json_profile_block(tmp_path: Path) -> None:
     paths = WorkspacePaths.from_root(tmp_path / "Career")
     bootstrap_private_workspace(paths)

@@ -10,7 +10,7 @@ import time
 from contextlib import contextmanager
 from pathlib import Path, PurePosixPath
 from typing import Iterator
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from .config import WorkspacePaths
 from .models import WorkspaceMarker
@@ -148,10 +148,14 @@ def assert_safe_private_root(root: Path) -> Path:
     return candidate
 
 
-def _open_directory_from(parent_fd: int, name: str) -> int:
+def _open_directory_from_raw(parent_fd: int, name: str) -> int:
     flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
+    return os.open(name, flags, dir_fd=parent_fd)
+
+
+def _open_directory_from(parent_fd: int, name: str) -> int:
     try:
-        return os.open(name, flags, dir_fd=parent_fd)
+        return _open_directory_from_raw(parent_fd, name)
     except OSError as exc:
         raise WorkspaceSafetyError(f"cannot open private directory: {name}") from exc
 
@@ -168,13 +172,15 @@ def _open_absolute_directory(path: Path, *, create_last: bool = False) -> int:
     try:
         for index, component in enumerate(target.parts[1:]):
             try:
-                next_descriptor = _open_directory_from(descriptor, component)
-            except WorkspaceSafetyError as exc:
+                next_descriptor = _open_directory_from_raw(descriptor, component)
+            except OSError as exc:
                 if not (create_last and index == len(target.parts[1:]) - 1):
-                    raise exc
+                    raise WorkspaceSafetyError(
+                        f"cannot open private directory: {component}"
+                    ) from exc
                 try:
                     os.mkdir(component, _DIRECTORY_MODE, dir_fd=descriptor)
-                    next_descriptor = _open_directory_from(descriptor, component)
+                    next_descriptor = _open_directory_from_raw(descriptor, component)
                 except OSError as create_error:
                     raise WorkspaceSafetyError(
                         "cannot create private workspace root"
@@ -323,19 +329,24 @@ def bootstrap_private_workspace(paths: WorkspacePaths) -> WorkspaceMarker:
     root_fd: int | None = None
     try:
         try:
-            root_fd = _open_directory_from(parent_fd, root.name)
-        except WorkspaceSafetyError:
+            root_fd = _open_directory_from_raw(parent_fd, root.name)
+        except FileNotFoundError:
             try:
                 os.mkdir(root.name, _DIRECTORY_MODE, dir_fd=parent_fd)
-                root_fd = _open_directory_from(parent_fd, root.name)
+                root_fd = _open_directory_from_raw(parent_fd, root.name)
             except OSError as exc:
                 raise WorkspaceSafetyError("cannot create private workspace root") from exc
-        os.fchmod(root_fd, _DIRECTORY_MODE)
-        try:
+        except OSError as exc:
+            raise WorkspaceSafetyError("cannot open private workspace root") from exc
+        entries = set(os.listdir(root_fd))
+        if entries:
             marker = _validate_root_fd(root_fd)
-        except WorkspaceSafetyError as exc:
-            if canonical.marker.exists():
-                raise exc
+            allowed = set(_WORKSPACE_DIRS) | {".job-scout-workspace.json", ".workspace.lock"}
+            unknown = entries - allowed
+            if unknown:
+                raise WorkspaceSafetyError("non-empty unrecognized workspace target")
+        else:
+            os.fchmod(root_fd, _DIRECTORY_MODE)
             marker = WorkspaceMarker(marker_version=1, workspace_id=uuid4(), schema_version=1)
             try:
                 _create_file_exclusive_fd(
@@ -382,20 +393,26 @@ def bootstrap_private_workspace(paths: WorkspacePaths) -> WorkspaceMarker:
         os.close(parent_fd)
 
 
-def _open_workspace_root(root: Path) -> tuple[int, WorkspaceMarker]:
+def _open_workspace_root(
+    root: Path, expected_workspace_id: UUID | None = None
+) -> tuple[int, WorkspaceMarker]:
     descriptor = _open_absolute_directory(root)
     try:
         marker = _validate_root_fd(descriptor)
+        if expected_workspace_id is not None and marker.workspace_id != expected_workspace_id:
+            raise WorkspaceSafetyError("workspace identity changed during operation")
         return descriptor, marker
     except Exception:
         os.close(descriptor)
         raise
 
 
-def read_private_bytes(path: Path) -> tuple[bytes, Path, WorkspaceMarker, PurePosixPath]:
+def read_private_bytes(
+    path: Path, expected_workspace_id: UUID | None = None
+) -> tuple[bytes, Path, WorkspaceMarker, PurePosixPath]:
     """Read a 0600 regular file via validated directory file descriptors."""
     root, relative = _discover_workspace(path)
-    root_fd, marker = _open_workspace_root(root)
+    root_fd, marker = _open_workspace_root(root, expected_workspace_id)
     parent_fd: int | None = None
     descriptor: int | None = None
     try:
@@ -420,10 +437,12 @@ def read_private_bytes(path: Path) -> tuple[bytes, Path, WorkspaceMarker, PurePo
         os.close(root_fd)
 
 
-def atomic_write_private(path: Path, data: bytes) -> None:
+def atomic_write_private(
+    path: Path, data: bytes, expected_workspace_id: UUID | None = None
+) -> None:
     """Write one private file atomically through a validated directory FD."""
     root, relative = _discover_workspace(path)
-    root_fd, _ = _open_workspace_root(root)
+    root_fd, _ = _open_workspace_root(root, expected_workspace_id)
     parent_fd: int | None = None
     try:
         parent_fd = _open_relative_directory_fd(root_fd, PurePosixPath(*relative.parts[:-1]))
@@ -441,13 +460,16 @@ def _lock_payload() -> bytes:
 
 
 @contextmanager
-def workspace_lock(paths: WorkspacePaths, timeout_seconds: float = 2.5) -> Iterator[None]:
+def workspace_lock(
+    paths: WorkspacePaths,
+    timeout_seconds: float = 2.5,
+    expected_workspace_id: UUID | None = None,
+) -> Iterator[None]:
     """Acquire a persistent, kernel-enforced non-stealable workspace lock."""
     if timeout_seconds < 0:
         raise ValueError("timeout must not be negative")
     canonical = _canonical_paths(paths)
-    root = assert_safe_private_root(canonical.root)
-    root_fd, _ = _open_workspace_root(root)
+    root_fd, _ = _open_workspace_root(canonical.root, expected_workspace_id)
     descriptor: int | None = None
     try:
         descriptor = os.open(

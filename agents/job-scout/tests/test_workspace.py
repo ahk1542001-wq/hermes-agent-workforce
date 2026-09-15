@@ -225,7 +225,7 @@ def test_bootstrap_root_swap_cannot_write_outside(
     root = tmp_path / "Career"
     outside = tmp_path / "outside"
     outside.mkdir()
-    original = workspace_module._open_directory_from
+    original = workspace_module._open_directory_from_raw
     swapped = False
 
     def swap(parent_fd: int, name: str) -> int:
@@ -235,7 +235,7 @@ def test_bootstrap_root_swap_cannot_write_outside(
             swapped = True
         return original(parent_fd, name)
 
-    monkeypatch.setattr(workspace_module, "_open_directory_from", swap)
+    monkeypatch.setattr(workspace_module, "_open_directory_from_raw", swap)
     with pytest.raises(WorkspaceSafetyError):
         bootstrap_private_workspace(WorkspacePaths.from_root(root))
     assert not (outside / ".job-scout-workspace.json").exists()
@@ -252,7 +252,7 @@ def test_lock_root_swap_cannot_open_outside(
     outside = tmp_path / "outside"
     outside.mkdir()
     real_root = paths.root.with_name("career-real")
-    original = workspace_module._open_directory_from
+    original = workspace_module._open_directory_from_raw
     swapped = False
 
     def swap(parent_fd: int, name: str) -> int:
@@ -263,10 +263,64 @@ def test_lock_root_swap_cannot_open_outside(
             swapped = True
         return original(parent_fd, name)
 
-    monkeypatch.setattr(workspace_module, "_open_directory_from", swap)
+    monkeypatch.setattr(workspace_module, "_open_directory_from_raw", swap)
     with pytest.raises(WorkspaceSafetyError):
         with workspace_lock(paths, timeout_seconds=0.1):
             pass
     paths.root.unlink()
     real_root.rename(paths.root)
     assert not (outside / ".workspace.lock").exists()
+
+
+def test_bootstrap_does_not_adopt_inserted_nonempty_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import hermes_job_scout.workspace as workspace_module
+
+    root = tmp_path / "Career"
+    original = workspace_module._open_directory_from_raw
+    inserted = False
+
+    def insert(parent_fd: int, name: str) -> int:
+        nonlocal inserted
+        if name == root.name and not inserted:
+            root.mkdir()
+            (root / "intruder").write_text("untouched", encoding="utf-8")
+            inserted = True
+        return original(parent_fd, name)
+
+    monkeypatch.setattr(workspace_module, "_open_directory_from_raw", insert)
+    with pytest.raises(WorkspaceSafetyError):
+        bootstrap_private_workspace(WorkspacePaths.from_root(root))
+    assert not (root / ".job-scout-workspace.json").exists()
+    assert stat.S_IMODE(root.stat().st_mode) == 0o755
+    assert (root / "intruder").read_text(encoding="utf-8") == "untouched"
+
+
+def test_lock_rejects_swapped_valid_workspace_identity(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import hermes_job_scout.workspace as workspace_module
+
+    paths = WorkspacePaths.from_root(tmp_path / "Career")
+    marker = bootstrap_private_workspace(paths)
+    foreign = WorkspacePaths.from_root(tmp_path / "Foreign")
+    bootstrap_private_workspace(foreign)
+    real_root = paths.root.with_name("career-real")
+    original = workspace_module._open_directory_from_raw
+    swapped = False
+
+    def swap(parent_fd: int, name: str) -> int:
+        nonlocal swapped
+        if name == paths.root.name and not swapped:
+            paths.root.rename(real_root)
+            foreign.root.rename(paths.root)
+            swapped = True
+        return original(parent_fd, name)
+
+    monkeypatch.setattr(workspace_module, "_open_directory_from_raw", swap)
+    with pytest.raises(WorkspaceSafetyError):
+        with workspace_lock(paths, expected_workspace_id=marker.workspace_id):
+            pass
+    paths.root.rename(foreign.root)
+    real_root.rename(paths.root)

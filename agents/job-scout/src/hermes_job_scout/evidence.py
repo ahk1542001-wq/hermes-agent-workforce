@@ -162,6 +162,7 @@ def approve_evidence_pack(
         atomic_write_private(
             destination,
             approval.model_dump_json(by_alias=False).encode("utf-8"),
+            expected_workspace_id=current.workspace_id,
         )
     except (OSError, ValueError, WorkspaceSafetyError) as exc:
         raise EvidenceApprovalError("approval record could not be written privately") from exc
