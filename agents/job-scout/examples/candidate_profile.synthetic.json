@@ -1,0 +1,28 @@
+{
+  "candidate_id": "candidate-example-001",
+  "display_name": "Alex Example",
+  "headline": "AI Automation Engineer | Agentic Workflows & n8n",
+  "summary": "Synthetic candidate profile for deterministic local tests.",
+  "facts": [
+    {
+      "fact_id": "fact-automation-001",
+      "category": "skill",
+      "allowed_wording": "Builds automation workflows with n8n and Python.",
+      "source": "synthetic portfolio evidence at example.com",
+      "verified": true,
+      "metric_evidence": null
+    },
+    {
+      "fact_id": "fact-agents-001",
+      "category": "project",
+      "allowed_wording": "Designed evidence-backed agent workflows.",
+      "source": "synthetic project record at example.com",
+      "verified": true,
+      "metric_evidence": "Synthetic test suite result"
+    }
+  ],
+  "skills": ["Python", "n8n", "workflow automation", "agentic systems"],
+  "languages": {"English": "professional", "Thai": "basic"},
+  "experience": ["Automation workflow projects"],
+  "education": ["Synthetic continuing education record"]
+}

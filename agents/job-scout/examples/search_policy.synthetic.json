@@ -1,0 +1,13 @@
+{
+  "policy_version": "2026-09-synthetic-v1",
+  "headline": "AI Automation Engineer | Agentic Workflows & n8n",
+  "role_aliases": ["AI automation engineer", "agentic workflow engineer", "n8n automation engineer"],
+  "geography_priority": ["worldwide remote", "APAC remote", "international remote", "Thailand"],
+  "allowed_work_types": ["full_time", "direct_contract", "freelance_contract", "paid_internship"],
+  "accepted_languages": ["English", "Thai basic or optional"],
+  "thai_level": "basic",
+  "max_experience_years": 3,
+  "freshness_days": 30,
+  "cash_budget_usd": 0,
+  "excluded_seniority": ["senior", "lead", "principal"]
+}
