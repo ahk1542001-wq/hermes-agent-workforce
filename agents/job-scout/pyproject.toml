@@ -8,7 +8,6 @@ version = "0.1.0"
 description = "Local-first, privacy-preserving job scouting foundation."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
-license = { file = "LICENSE" }
 authors = [{ name = "Victor" }]
 dependencies = [
     "pydantic>=2.12,<3",

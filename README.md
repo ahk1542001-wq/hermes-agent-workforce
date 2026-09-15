@@ -1,8 +1,7 @@
-# Hermes Job Scout
+# Hermes Agent Workforce
 
-Hermes Job Scout is a local-first foundation for privacy-preserving job
-scouting. The project currently contains only the public-safe package
-scaffold and verification harness.
+Hermes Agent Workforce is a local-first monorepo for independent, privacy-
+preserving agent packages.
 
-All examples and tests use synthetic content. Network discovery, provider and
-model calls, live credentials, and external actions are out of scope.
+The current package is `agents/job-scout`. Each package owns its runtime and
+tests; the root verification entry point delegates to that package.
