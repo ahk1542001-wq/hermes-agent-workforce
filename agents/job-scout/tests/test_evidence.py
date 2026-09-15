@@ -151,7 +151,9 @@ def test_approval_rejects_swapped_foreign_workspace_before_write(
     bootstrap_private_workspace(paths)
     bootstrap_private_workspace(foreign)
     pack_path = paths.master / "candidate-facts-private.md"
+    foreign_pack_path = foreign.master / "candidate-facts-private.md"
     atomic_write_private(pack_path, _markdown(_profile()).encode("utf-8"))
+    atomic_write_private(foreign_pack_path, _markdown(_profile()).encode("utf-8"))
     loaded = load_evidence_pack(pack_path)
     real_root = paths.root.with_name("career-real")
     original = workspace_module._open_directory_from_raw
@@ -171,6 +173,41 @@ def test_approval_rejects_swapped_foreign_workspace_before_write(
     paths.root.rename(foreign.root)
     real_root.rename(paths.root)
     assert not (paths.master / "evidence-approval.json").exists()
+
+
+def test_require_rejects_identical_pack_bytes_in_swapped_workspace(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import hermes_job_scout.workspace as workspace_module
+
+    paths = WorkspacePaths.from_root(tmp_path / "Career")
+    foreign = WorkspacePaths.from_root(tmp_path / "Foreign")
+    bootstrap_private_workspace(paths)
+    bootstrap_private_workspace(foreign)
+    pack_path = paths.master / "candidate-facts-private.md"
+    foreign_pack_path = foreign.master / "candidate-facts-private.md"
+    pack_bytes = _markdown(_profile()).encode("utf-8")
+    atomic_write_private(pack_path, pack_bytes)
+    atomic_write_private(foreign_pack_path, pack_bytes)
+    loaded = load_evidence_pack(pack_path)
+    approval = approve_evidence_pack(loaded, paths.master / "evidence-approval.json", NOW)
+    real_root = paths.root.with_name("career-real")
+    original = workspace_module._open_directory_from_raw
+    swapped = False
+
+    def swap(parent_fd: int, name: str) -> int:
+        nonlocal swapped
+        if name == paths.root.name and not swapped:
+            paths.root.rename(real_root)
+            foreign.root.rename(paths.root)
+            swapped = True
+        return original(parent_fd, name)
+
+    monkeypatch.setattr(workspace_module, "_open_directory_from_raw", swap)
+    with pytest.raises(EvidenceApprovalError):
+        require_approved_evidence(loaded, approval)
+    paths.root.rename(foreign.root)
+    real_root.rename(paths.root)
 
 
 def test_evidence_requires_exactly_one_json_profile_block(tmp_path: Path) -> None:

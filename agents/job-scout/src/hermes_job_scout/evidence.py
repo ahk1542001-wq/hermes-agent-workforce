@@ -142,7 +142,7 @@ def approve_evidence_pack(
         current = load_evidence_pack(pack.path)
     except EvidencePackError as exc:
         raise EvidenceApprovalError("current Evidence Pack is invalid") from exc
-    if current.pack_sha256 != pack.pack_sha256:
+    if not _same_evidence_identity(current, pack):
         raise EvidenceApprovalError("in-memory Evidence Pack is stale")
     destination = approval_path.expanduser().absolute()
     expected_destination = current.workspace_root / "master" / "evidence-approval.json"
@@ -192,7 +192,7 @@ def require_approved_evidence(
         current = load_evidence_pack(pack.path)
     except EvidencePackError as exc:
         raise EvidenceApprovalError("current Evidence Pack is invalid") from exc
-    if current.pack_sha256 != pack.pack_sha256:
+    if not _same_evidence_identity(current, pack):
         raise EvidenceApprovalError("in-memory Evidence Pack is stale")
     record, approval_root, approval_marker, approval_relative = _coerce_approval(approval)
     if approval_root is not None and approval_root != current.workspace_root:
@@ -210,3 +210,12 @@ def require_approved_evidence(
     if record.pack_sha256 != current.pack_sha256:
         raise EvidenceApprovalError("Evidence Pack changed after owner approval")
     return current
+
+
+def _same_evidence_identity(current: EvidencePack, original: EvidencePack) -> bool:
+    return (
+        current.workspace_id == original.workspace_id
+        and current.workspace_root == original.workspace_root
+        and current.pack_relative_path == original.pack_relative_path
+        and current.pack_sha256 == original.pack_sha256
+    )
