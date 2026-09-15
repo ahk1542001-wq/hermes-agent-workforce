@@ -19,6 +19,7 @@ from hermes_job_scout.models import (
     SourceAuthority,
     SourceRecord,
     WorkspaceMarker,
+    WorkType,
 )
 
 EXAMPLES = Path(__file__).parents[1] / "examples"
@@ -150,6 +151,55 @@ def test_discovery_run_has_explicit_coverage_unique_sources_and_zero_spend() -> 
             actual_search_retrieval_spend_usd=0,
         )
 
+    with pytest.raises(ValidationError):
+        DiscoveryRun(
+            run_id="run-synthetic-empty-source",
+            started_at=NOW,
+            completed_at=NOW,
+            coverage="full",
+            checked_source_ids=[""],
+            failed_source_ids=[],
+            changed_count=0,
+            provider="synthetic-search",
+            actual_search_retrieval_spend_usd=0,
+        )
+    with pytest.raises(ValidationError):
+        DiscoveryRun(
+            run_id="run-synthetic-duplicate-failed",
+            started_at=NOW,
+            completed_at=NOW,
+            coverage="partial",
+            checked_source_ids=["source-a"],
+            failed_source_ids=["source-a", "source-a"],
+            changed_count=0,
+            provider="synthetic-search",
+            actual_search_retrieval_spend_usd=0,
+        )
+    with pytest.raises(ValidationError):
+        DiscoveryRun(
+            run_id="run-synthetic-empty-failed",
+            started_at=NOW,
+            completed_at=NOW,
+            coverage="partial",
+            checked_source_ids=["source-a"],
+            failed_source_ids=[""],
+            changed_count=0,
+            provider="synthetic-search",
+            actual_search_retrieval_spend_usd=0,
+        )
+    with pytest.raises(ValidationError):
+        DiscoveryRun(
+            run_id="run-synthetic-empty-provider",
+            started_at=NOW,
+            completed_at=NOW,
+            coverage="full",
+            checked_source_ids=["source-a"],
+            failed_source_ids=[],
+            changed_count=0,
+            provider="",
+            actual_search_retrieval_spend_usd=0,
+        )
+
 
 def test_discovery_run_records_auditable_result_and_tool_counts() -> None:
     run = DiscoveryRun(
@@ -163,6 +213,7 @@ def test_discovery_run_records_auditable_result_and_tool_counts() -> None:
         tokens_used=120,
         tool_calls=2,
         free_credits_remaining={"search": 20},
+        provider="synthetic-search",
         actual_search_retrieval_spend_usd=0,
     )
     assert run.result_count == 4
@@ -178,6 +229,7 @@ def test_discovery_run_records_auditable_result_and_tool_counts() -> None:
             tokens_used=-1,
             tool_calls=-1,
             free_credits_remaining={"search": -1},
+            provider="synthetic-search",
             actual_search_retrieval_spend_usd=0,
         )
     with pytest.raises(ValidationError):
@@ -192,6 +244,7 @@ def test_discovery_run_records_auditable_result_and_tool_counts() -> None:
             tokens_used="2",
             tool_calls="1",
             free_credits_remaining={"search": "20"},
+            provider="synthetic-search",
             actual_search_retrieval_spend_usd=0,
         )
     with pytest.raises(ValidationError):
@@ -203,6 +256,7 @@ def test_discovery_run_records_auditable_result_and_tool_counts() -> None:
             checked_source_ids=["source-a"],
             failed_source_ids=["source-b"],
             changed_count=-1,
+            provider="synthetic-search",
             actual_search_retrieval_spend_usd=0,
         )
 
@@ -242,11 +296,30 @@ def test_source_and_job_timestamps_cannot_move_backwards() -> None:
             role="AI Automation Engineer",
             first_seen_at=NOW + timedelta(days=1),
             last_verified_at=NOW,
-            work_type="full_time",
             location="Worldwide",
             remote_region="global",
             experience="0-3 years",
             fingerprint="a" * 64,
+            work_type=WorkType.FULL_TIME,
+        )
+
+    with pytest.raises(ValidationError, match="posted.*closing|closes"):
+        JobRecord(
+            job_id="job-2",
+            stable_url="https://example.com/jobs/automation-2",
+            source_type="official",
+            authority=SourceAuthority.OFFICIAL,
+            company="Example Automation Labs",
+            role="AI Automation Engineer",
+            first_seen_at=NOW,
+            last_verified_at=NOW,
+            posted_at=NOW + timedelta(days=2),
+            closes_at=NOW + timedelta(days=1),
+            work_type=WorkType.FULL_TIME,
+            location="Worldwide",
+            remote_region="global",
+            experience="0-3 years",
+            fingerprint="b" * 64,
         )
 
 
@@ -301,5 +374,14 @@ def test_candidate_profile_rejects_unverified_or_unbound_claims_and_duplicates()
         (EXAMPLES / "candidate_profile.synthetic.json").read_text(encoding="utf-8")
     )
     payload["facts"].append(payload["facts"][0])
+    with pytest.raises(ValidationError):
+        CandidateProfile.model_validate(payload)
+
+
+def test_candidate_profile_languages_must_be_verified_claims() -> None:
+    payload = json.loads(
+        (EXAMPLES / "candidate_profile.synthetic.json").read_text(encoding="utf-8")
+    )
+    payload["languages"]["French"] = "native"
     with pytest.raises(ValidationError):
         CandidateProfile.model_validate(payload)

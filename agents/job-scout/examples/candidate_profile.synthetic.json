@@ -63,8 +63,8 @@
     {
       "fact_id": "fact-experience-001",
       "category": "experience",
-      "allowed_wording": "Automation workflow projects",
-      "source": "synthetic experience record at example.com",
+      "allowed_wording": "Worked with Example Automation Labs on synthetic automation workflows.",
+      "source": "Example Automation Labs synthetic experience record at example.com",
       "verified": true,
       "metric_evidence": null
     },
@@ -75,10 +75,26 @@
       "source": "synthetic education record at example.com",
       "verified": true,
       "metric_evidence": null
+    },
+    {
+      "fact_id": "fact-english-001",
+      "category": "language",
+      "allowed_wording": "English: professional",
+      "source": "synthetic language record at example.com",
+      "verified": true,
+      "metric_evidence": null
+    },
+    {
+      "fact_id": "fact-thai-001",
+      "category": "language",
+      "allowed_wording": "Thai: basic",
+      "source": "synthetic language record at example.com",
+      "verified": true,
+      "metric_evidence": null
     }
   ],
   "skills": ["Python", "n8n", "workflow automation", "agentic systems"],
   "languages": {"English": "professional", "Thai": "basic"},
-  "experience": ["Automation workflow projects"],
+  "experience": ["Worked with Example Automation Labs on synthetic automation workflows."],
   "education": ["Synthetic continuing education record"]
 }

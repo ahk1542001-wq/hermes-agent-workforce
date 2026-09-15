@@ -113,7 +113,14 @@ class CandidateProfile(StrictModel):
         if len(fact_ids) != len(set(fact_ids)):
             raise ValueError("fact IDs must be unique")
         allowed_wording = {fact.allowed_wording for fact in self.facts if fact.verified}
-        claims = [self.summary, *self.skills, *self.experience, *self.education]
+        language_claims = [f"{language}: {level}" for language, level in self.languages.items()]
+        claims = [
+            self.summary,
+            *self.skills,
+            *self.experience,
+            *self.education,
+            *language_claims,
+        ]
         if len(claims) != len(set(claims)):
             raise ValueError("profile claims must be unique")
         unsupported = [claim for claim in claims if claim not in allowed_wording]
@@ -203,7 +210,7 @@ class DiscoveryRun(StrictModel):
     result_count: int = Field(default=0, ge=0)
     tokens_used: int | None = Field(default=None, ge=0)
     tool_calls: int = Field(default=0, ge=0)
-    provider: str = Field(default="", max_length=100)
+    provider: str = Field(min_length=1, max_length=100)
     query_count: int = Field(default=0, ge=0)
     pages_checked: int = Field(default=0, ge=0)
     cache_hits: int = Field(default=0, ge=0)
@@ -221,8 +228,19 @@ class DiscoveryRun(StrictModel):
     @field_validator("checked_source_ids")
     @classmethod
     def _checked_sources_are_unique(cls, value: list[str]) -> list[str]:
+        if any(not source_id for source_id in value):
+            raise ValueError("source IDs cannot be blank")
         if len(value) != len(set(value)):
             raise ValueError("checked source IDs must be unique")
+        return value
+
+    @field_validator("failed_source_ids")
+    @classmethod
+    def _failed_sources_are_unique_and_nonblank(cls, value: list[str]) -> list[str]:
+        if any(not source_id for source_id in value):
+            raise ValueError("source IDs cannot be blank")
+        if len(value) != len(set(value)):
+            raise ValueError("failed source IDs must be unique")
         return value
 
     @model_validator(mode="after")
@@ -284,6 +302,12 @@ class JobRecord(StrictModel):
     def _verification_follows_first_seen(self) -> JobRecord:
         if self.first_seen_at > self.last_verified_at:
             raise ValueError("first seen timestamp cannot exceed last verified timestamp")
+        if (
+            self.posted_at is not None
+            and self.closes_at is not None
+            and self.posted_at > self.closes_at
+        ):
+            raise ValueError("posted_at cannot exceed closes_at")
         return self
 
 
