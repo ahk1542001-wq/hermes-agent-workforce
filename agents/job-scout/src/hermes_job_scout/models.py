@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 from enum import StrEnum
-from typing import Any
+from typing import Annotated, Any
 from uuid import UUID
 
 from pydantic import (
@@ -21,7 +21,12 @@ from pydantic import (
 class StrictModel(BaseModel):
     """Common model policy: unknown fields are never silently accepted."""
 
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    model_config = ConfigDict(
+        extra="forbid",
+        strict=True,
+        allow_inf_nan=False,
+        str_strip_whitespace=True,
+    )
 
     @field_validator("*", mode="after")
     @classmethod
@@ -102,6 +107,27 @@ class CandidateProfile(StrictModel):
     experience: list[str] = Field(default_factory=list)
     education: list[str] = Field(default_factory=list)
 
+    @model_validator(mode="after")
+    def _claims_are_verified_and_bound(self) -> CandidateProfile:
+        fact_ids = [fact.fact_id for fact in self.facts]
+        if len(fact_ids) != len(set(fact_ids)):
+            raise ValueError("fact IDs must be unique")
+        allowed_wording = {fact.allowed_wording for fact in self.facts if fact.verified}
+        claims = [self.summary, *self.skills, *self.experience, *self.education]
+        if len(claims) != len(set(claims)):
+            raise ValueError("profile claims must be unique")
+        unsupported = [claim for claim in claims if claim not in allowed_wording]
+        if unsupported:
+            raise ValueError("profile claims must reference verified allowed wording")
+        return self
+
+
+class CandidateEvidencePack(StrictModel):
+    pack_id: str = Field(min_length=1, max_length=120)
+    schema_version: int = Field(default=1, ge=1, le=1)
+    source_note: str = Field(min_length=1, max_length=500)
+    candidate_profile: CandidateProfile
+
 
 class SearchPolicy(StrictModel):
     policy_version: str = Field(min_length=1, max_length=80)
@@ -158,6 +184,13 @@ class SourceRecord(StrictModel):
     last_changed_at: datetime | None = None
     last_error_code: str | None = Field(default=None, max_length=80)
 
+    @model_validator(mode="after")
+    def _health_timestamps_are_ordered(self) -> SourceRecord:
+        for timestamp in (self.last_success_at, self.last_changed_at):
+            if timestamp is not None and timestamp > self.last_checked_at:
+                raise ValueError("source health timestamps cannot exceed last checked time")
+        return self
+
 
 class DiscoveryRun(StrictModel):
     run_id: str = Field(min_length=1, max_length=120)
@@ -167,6 +200,9 @@ class DiscoveryRun(StrictModel):
     checked_source_ids: list[str] = Field(min_length=1)
     failed_source_ids: list[str] = Field(default_factory=list)
     changed_count: int = Field(ge=0)
+    result_count: int = Field(default=0, ge=0)
+    tokens_used: int | None = Field(default=None, ge=0)
+    tool_calls: int = Field(default=0, ge=0)
     provider: str = Field(default="", max_length=100)
     query_count: int = Field(default=0, ge=0)
     pages_checked: int = Field(default=0, ge=0)
@@ -196,6 +232,13 @@ class DiscoveryRun(StrictModel):
         if self.completed_at < self.started_at:
             raise ValueError("completion cannot precede start")
         return self
+
+    @field_validator("free_credits_remaining")
+    @classmethod
+    def _credits_are_nonnegative(cls, value: dict[str, int]) -> dict[str, int]:
+        if any(credit < 0 for credit in value.values()):
+            raise ValueError("free credits remaining cannot be negative")
+        return value
 
 
 class EvidenceRef(StrictModel):
@@ -237,10 +280,18 @@ class JobRecord(StrictModel):
     owner_decision: Decision = Decision.NEEDS_VICTOR
     work_auth_label: WorkAuthLabel | None = None
 
+    @model_validator(mode="after")
+    def _verification_follows_first_seen(self) -> JobRecord:
+        if self.first_seen_at > self.last_verified_at:
+            raise ValueError("first seen timestamp cannot exceed last verified timestamp")
+        return self
+
 
 class FitScore(StrictModel):
     total_score: float = Field(ge=0, le=100)
-    component_evidence: dict[str, float] = Field(default_factory=dict)
+    component_evidence: dict[str, Annotated[float, Field(ge=0, le=100)]] = Field(
+        default_factory=dict
+    )
     policy_version: str = Field(min_length=1, max_length=80)
     evidence_coverage: float = Field(ge=0, le=100)
     provisional: bool
@@ -299,6 +350,7 @@ class WorkspaceMarker(StrictModel):
 __all__: list[str] = [
     "ApprovalGrant",
     "ApplicationEvent",
+    "CandidateEvidencePack",
     "CandidateFact",
     "CandidateProfile",
     "Decision",

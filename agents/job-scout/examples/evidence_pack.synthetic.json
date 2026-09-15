@@ -12,6 +12,54 @@
         "source": "synthetic portfolio evidence at example.com",
         "verified": true,
         "metric_evidence": null
+      },
+      {
+        "fact_id": "fact-summary-001",
+        "category": "summary",
+        "allowed_wording": "Synthetic candidate profile for deterministic local tests.",
+        "source": "synthetic profile record at example.com",
+        "verified": true,
+        "metric_evidence": null
+      },
+      {
+        "fact_id": "fact-python-001",
+        "category": "skill",
+        "allowed_wording": "Python",
+        "source": "synthetic skills record at example.com",
+        "verified": true,
+        "metric_evidence": null
+      },
+      {
+        "fact_id": "fact-n8n-001",
+        "category": "skill",
+        "allowed_wording": "n8n",
+        "source": "synthetic skills record at example.com",
+        "verified": true,
+        "metric_evidence": null
+      },
+      {
+        "fact_id": "fact-workflow-001",
+        "category": "skill",
+        "allowed_wording": "workflow automation",
+        "source": "synthetic skills record at example.com",
+        "verified": true,
+        "metric_evidence": null
+      },
+      {
+        "fact_id": "fact-experience-001",
+        "category": "experience",
+        "allowed_wording": "Automation workflow projects",
+        "source": "synthetic experience record at example.com",
+        "verified": true,
+        "metric_evidence": null
+      },
+      {
+        "fact_id": "fact-education-001",
+        "category": "education",
+        "allowed_wording": "Synthetic continuing education record",
+        "source": "synthetic education record at example.com",
+        "verified": true,
+        "metric_evidence": null
       }
     ],
     "skills": ["Python", "n8n", "workflow automation"],

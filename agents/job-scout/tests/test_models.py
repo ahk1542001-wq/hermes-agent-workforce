@@ -8,12 +8,16 @@ from pydantic import ValidationError
 
 from hermes_job_scout.models import (
     ApprovalGrant,
+    CandidateEvidencePack,
     CandidateProfile,
     DiscoveryHint,
     DiscoveryRun,
     EvidenceRef,
     FitScore,
+    JobRecord,
     SearchPolicy,
+    SourceAuthority,
+    SourceRecord,
     WorkspaceMarker,
 )
 
@@ -59,6 +63,18 @@ def test_scores_and_coverage_are_bounded_and_provisional_is_derived() -> None:
             policy_version="2026-09-v1",
             evidence_coverage=100,
             provisional=False,
+        )
+
+
+@pytest.mark.parametrize("value", [-1, 101, float("nan"), "50"])
+def test_fit_score_component_values_are_finite_bounded_numbers(value: object) -> None:
+    with pytest.raises(ValidationError):
+        FitScore(
+            total_score=72,
+            component_evidence={"skill_fit": value},
+            policy_version="2026-09-v1",
+            evidence_coverage=80,
+            provisional=True,
         )
     with pytest.raises(ValidationError):
         FitScore(
@@ -133,6 +149,51 @@ def test_discovery_run_has_explicit_coverage_unique_sources_and_zero_spend() -> 
             changed_count=0,
             actual_search_retrieval_spend_usd=0,
         )
+
+
+def test_discovery_run_records_auditable_result_and_tool_counts() -> None:
+    run = DiscoveryRun(
+        run_id="run-synthetic-audit",
+        started_at=NOW,
+        completed_at=NOW,
+        coverage="full",
+        checked_source_ids=["source-a"],
+        changed_count=0,
+        result_count=4,
+        tokens_used=120,
+        tool_calls=2,
+        free_credits_remaining={"search": 20},
+        actual_search_retrieval_spend_usd=0,
+    )
+    assert run.result_count == 4
+    with pytest.raises(ValidationError):
+        DiscoveryRun(
+            run_id="run-synthetic-bad-audit",
+            started_at=NOW,
+            completed_at=NOW,
+            coverage="full",
+            checked_source_ids=["source-a"],
+            changed_count=0,
+            result_count=-1,
+            tokens_used=-1,
+            tool_calls=-1,
+            free_credits_remaining={"search": -1},
+            actual_search_retrieval_spend_usd=0,
+        )
+    with pytest.raises(ValidationError):
+        DiscoveryRun(
+            run_id="run-synthetic-string-audit",
+            started_at=NOW,
+            completed_at=NOW,
+            coverage="full",
+            checked_source_ids=["source-a"],
+            changed_count=0,
+            result_count="4",
+            tokens_used="2",
+            tool_calls="1",
+            free_credits_remaining={"search": "20"},
+            actual_search_retrieval_spend_usd=0,
+        )
     with pytest.raises(ValidationError):
         DiscoveryRun(
             run_id="run-synthetic-3",
@@ -160,6 +221,44 @@ def test_approval_cannot_exceed_24_hours() -> None:
         )
 
 
+def test_source_and_job_timestamps_cannot_move_backwards() -> None:
+    with pytest.raises(ValidationError):
+        SourceRecord(
+            source_id="source-1",
+            organization="Example Automation Labs",
+            source_type="official",
+            url="https://example.com/jobs",
+            status="healthy",
+            last_checked_at=NOW,
+            last_success_at=NOW + timedelta(minutes=1),
+        )
+    with pytest.raises(ValidationError):
+        JobRecord(
+            job_id="job-1",
+            stable_url="https://example.com/jobs/automation",
+            source_type="official",
+            authority=SourceAuthority.OFFICIAL,
+            company="Example Automation Labs",
+            role="AI Automation Engineer",
+            first_seen_at=NOW + timedelta(days=1),
+            last_verified_at=NOW,
+            work_type="full_time",
+            location="Worldwide",
+            remote_region="global",
+            experience="0-3 years",
+            fingerprint="a" * 64,
+        )
+
+
+def test_candidate_evidence_pack_is_strict_and_schema_versioned() -> None:
+    payload = json.loads((EXAMPLES / "evidence_pack.synthetic.json").read_text(encoding="utf-8"))
+    pack = CandidateEvidencePack.model_validate(payload)
+    assert pack.schema_version == 1
+    payload["unexpected"] = "no"
+    with pytest.raises(ValidationError):
+        CandidateEvidencePack.model_validate(payload)
+
+
 def test_all_synthetic_examples_load_through_models() -> None:
     profile = CandidateProfile.model_validate_json(
         (EXAMPLES / "candidate_profile.synthetic.json").read_text(encoding="utf-8")
@@ -171,7 +270,7 @@ def test_all_synthetic_examples_load_through_models() -> None:
     assert profile.languages["Thai"] == "basic"
 
     payload = json.loads((EXAMPLES / "evidence_pack.synthetic.json").read_text(encoding="utf-8"))
-    assert CandidateProfile.model_validate(payload["candidate_profile"]).facts
+    assert CandidateEvidencePack.model_validate(payload).candidate_profile.facts
 
 
 def test_candidate_profile_rejects_unsupported_free_form_claims() -> None:
@@ -179,5 +278,28 @@ def test_candidate_profile_rejects_unsupported_free_form_claims() -> None:
         (EXAMPLES / "candidate_profile.synthetic.json").read_text(encoding="utf-8")
     )
     payload["unapproved_claim"] = "I invented a credential"
+    with pytest.raises(ValidationError):
+        CandidateProfile.model_validate(payload)
+
+
+def test_candidate_profile_rejects_unverified_or_unbound_claims_and_duplicates() -> None:
+    payload = json.loads(
+        (EXAMPLES / "candidate_profile.synthetic.json").read_text(encoding="utf-8")
+    )
+    payload["facts"][2]["verified"] = False
+    with pytest.raises(ValidationError):
+        CandidateProfile.model_validate(payload)
+
+    payload = json.loads(
+        (EXAMPLES / "candidate_profile.synthetic.json").read_text(encoding="utf-8")
+    )
+    payload["skills"][0] = "Unsupported cloud credential"
+    with pytest.raises(ValidationError):
+        CandidateProfile.model_validate(payload)
+
+    payload = json.loads(
+        (EXAMPLES / "candidate_profile.synthetic.json").read_text(encoding="utf-8")
+    )
+    payload["facts"].append(payload["facts"][0])
     with pytest.raises(ValidationError):
         CandidateProfile.model_validate(payload)
