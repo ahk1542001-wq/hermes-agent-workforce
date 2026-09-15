@@ -186,3 +186,87 @@ def test_forged_workspace_paths_are_rejected(tmp_path: Path) -> None:
     with pytest.raises(WorkspaceSafetyError):
         with workspace_lock(forged):
             pass
+
+
+def test_atomic_write_rejects_intermediate_symlink_swap(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import hermes_job_scout.workspace as workspace_module
+
+    paths = WorkspacePaths.from_root(tmp_path / "Career")
+    bootstrap_private_workspace(paths)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    real_reports = paths.reports.with_name("reports-real")
+    original = workspace_module._open_directory_from
+    swapped = False
+
+    def swap(parent_fd: int, name: str) -> int:
+        nonlocal swapped
+        if name == "reports" and not swapped:
+            paths.reports.rename(real_reports)
+            paths.reports.symlink_to(outside, target_is_directory=True)
+            swapped = True
+        return original(parent_fd, name)
+
+    monkeypatch.setattr(workspace_module, "_open_directory_from", swap)
+    with pytest.raises(WorkspaceSafetyError):
+        atomic_write_private(paths.reports / "report.md", b"must stay private")
+    paths.reports.unlink()
+    real_reports.rename(paths.reports)
+    assert not (outside / "report.md").exists()
+
+
+def test_bootstrap_root_swap_cannot_write_outside(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import hermes_job_scout.workspace as workspace_module
+
+    root = tmp_path / "Career"
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    original = workspace_module._open_directory_from
+    swapped = False
+
+    def swap(parent_fd: int, name: str) -> int:
+        nonlocal swapped
+        if name == root.name and not swapped:
+            root.symlink_to(outside, target_is_directory=True)
+            swapped = True
+        return original(parent_fd, name)
+
+    monkeypatch.setattr(workspace_module, "_open_directory_from", swap)
+    with pytest.raises(WorkspaceSafetyError):
+        bootstrap_private_workspace(WorkspacePaths.from_root(root))
+    assert not (outside / ".job-scout-workspace.json").exists()
+    root.unlink(missing_ok=True)
+
+
+def test_lock_root_swap_cannot_open_outside(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import hermes_job_scout.workspace as workspace_module
+
+    paths = WorkspacePaths.from_root(tmp_path / "Career")
+    bootstrap_private_workspace(paths)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    real_root = paths.root.with_name("career-real")
+    original = workspace_module._open_directory_from
+    swapped = False
+
+    def swap(parent_fd: int, name: str) -> int:
+        nonlocal swapped
+        if name == paths.root.name and not swapped:
+            paths.root.rename(real_root)
+            paths.root.symlink_to(outside, target_is_directory=True)
+            swapped = True
+        return original(parent_fd, name)
+
+    monkeypatch.setattr(workspace_module, "_open_directory_from", swap)
+    with pytest.raises(WorkspaceSafetyError):
+        with workspace_lock(paths, timeout_seconds=0.1):
+            pass
+    paths.root.unlink()
+    real_root.rename(paths.root)
+    assert not (outside / ".workspace.lock").exists()

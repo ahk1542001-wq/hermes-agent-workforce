@@ -115,11 +115,36 @@ def test_approval_rejects_extra_fields_and_cross_workspace(tmp_path: Path) -> No
     with pytest.raises(ValidationError):
         EvidenceApproval.model_validate({**approval.model_dump(), "extra": "no"})
     with pytest.raises(EvidenceApprovalError):
-        require_approved_evidence(load_evidence_pack(pack_path), other.marker)
+        other_pack_path = other.master / "candidate-facts-private.md"
+        atomic_write_private(other_pack_path, _markdown(_profile()).encode("utf-8"))
+        other_approval = approve_evidence_pack(
+            load_evidence_pack(other_pack_path), other.master / "evidence-approval.json", NOW
+        )
+        require_approved_evidence(load_evidence_pack(pack_path), other_approval)
+
+
+def test_approval_destination_is_one_reserved_path_only(tmp_path: Path) -> None:
+    paths = WorkspacePaths.from_root(tmp_path / "Career")
+    bootstrap_private_workspace(paths)
+    pack_path = paths.master / "candidate-facts-private.md"
+    pack = _markdown(_profile()).encode("utf-8")
+    atomic_write_private(pack_path, pack)
+    loaded = load_evidence_pack(pack_path)
+    for destination in (
+        paths.root / "evidence-approval.json",
+        paths.lock,
+        paths.database,
+        pack_path,
+        paths.master / "other-approval.json",
+    ):
+        with pytest.raises(EvidenceApprovalError):
+            approve_evidence_pack(loaded, destination, NOW)
 
 
 def test_evidence_requires_exactly_one_json_profile_block(tmp_path: Path) -> None:
-    pack_path = tmp_path / "candidate-facts-private.md"
-    pack_path.write_text("```json\n{}\n```\n```json\n{}\n```\n", encoding="utf-8")
+    paths = WorkspacePaths.from_root(tmp_path / "Career")
+    bootstrap_private_workspace(paths)
+    pack_path = paths.master / "candidate-facts-private.md"
+    atomic_write_private(pack_path, b"```json\n{}\n```\n```json\n{}\n```\n")
     with pytest.raises(EvidencePackError):
         load_evidence_pack(pack_path)
