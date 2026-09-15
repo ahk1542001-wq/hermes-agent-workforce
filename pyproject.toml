@@ -1,0 +1,54 @@
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "hermes-job-scout"
+version = "0.1.0"
+description = "Local-first, privacy-preserving job scouting foundation."
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+license = { file = "LICENSE" }
+authors = [{ name = "Victor" }]
+dependencies = [
+    "pydantic>=2.12,<3",
+    "typer>=0.16,<1",
+    "python-docx>=1.2,<2",
+    "pypdf>=6.0,<7",
+    "reportlab>=4.4,<5",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3,<9",
+    "pytest-cov>=6,<7",
+    "ruff>=0.12,<1",
+    "mypy>=1.17,<2",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/hermes_job_scout"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+
+[tool.ruff.format]
+line-ending = "lf"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--strict-markers"
+
+[tool.coverage.run]
+source = ["hermes_job_scout"]
+
+[tool.coverage.report]
+fail_under = 90
+
+[tool.mypy]
+python_version = "3.12"
+strict = true

@@ -1,0 +1,17 @@
+.env*
+!.env.example
+.venv/
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.sqlite*
+*.db
+*.pem
+*.key
+*cookies*.json
+browser_session*/
+data/private/
+reports/private/
+dist/
+build/
