@@ -55,6 +55,25 @@ def test_bootstrap_creates_private_tree_and_stable_marker(tmp_path: Path) -> Non
     assert stat.S_IMODE(paths.marker.stat().st_mode) == 0o600
 
 
+def test_bootstrap_accepts_only_an_empty_precreated_root(tmp_path: Path) -> None:
+    root = tmp_path / "Career"
+    root.mkdir()
+    paths = WorkspacePaths.from_root(root)
+
+    bootstrap_private_workspace(paths)
+
+    assert stat.S_IMODE(root.stat().st_mode) == 0o700
+
+
+def test_allowed_named_entries_without_marker_are_rejected(tmp_path: Path) -> None:
+    root = tmp_path / "Career"
+    (root / "master").mkdir(parents=True)
+    paths = WorkspacePaths.from_root(root)
+
+    with pytest.raises(WorkspaceSafetyError):
+        bootstrap_private_workspace(paths)
+
+
 def test_atomic_write_is_private_and_replaces_complete_content(tmp_path: Path) -> None:
     paths = WorkspacePaths.from_root(tmp_path / "Career")
     bootstrap_private_workspace(paths)
@@ -118,12 +137,22 @@ def test_dead_lock_requires_confirmed_dead_owner_or_expiry(tmp_path: Path) -> No
     paths = WorkspacePaths.from_root(tmp_path / "Career")
     bootstrap_private_workspace(paths)
     paths.lock.write_text("not-json", encoding="utf-8")
-    with pytest.raises(WorkspaceLockTimeout):
-        with workspace_lock(paths, timeout_seconds=0.05):
-            raise AssertionError("recent malformed locks must fail closed")
+    os.chmod(paths.lock, 0o600)
+    with workspace_lock(paths, timeout_seconds=0.2):
+        assert paths.lock.exists()
+    assert paths.lock.read_bytes() == b""
 
-    old = time.time() - 31
-    os.utime(paths.lock, (old, old))
+
+def test_lock_is_released_by_process_death(tmp_path: Path) -> None:
+    paths = WorkspacePaths.from_root(tmp_path / "Career")
+    bootstrap_private_workspace(paths)
+    process = multiprocessing.Process(
+        target=_hold_lock, args=(str(paths.root), multiprocessing.Queue())
+    )
+    process.start()
+    process.terminate()
+    process.join(timeout=3)
+    assert process.exitcode is not None
     with workspace_lock(paths, timeout_seconds=0.2):
         assert paths.lock.exists()
 
@@ -134,3 +163,26 @@ def test_private_root_rejects_nested_symlink_created_after_bootstrap(tmp_path: P
     (paths.reports / "escape").symlink_to(tmp_path, target_is_directory=True)
     with pytest.raises(WorkspaceSafetyError):
         atomic_write_private(paths.reports / "escape" / "report.md", b"no")
+
+
+def test_forged_workspace_paths_are_rejected(tmp_path: Path) -> None:
+    paths = WorkspacePaths.from_root(tmp_path / "Career")
+    bootstrap_private_workspace(paths)
+    forged = paths.__class__(
+        root=paths.root,
+        master=paths.root / "elsewhere",
+        evidence=paths.evidence,
+        education=paths.education,
+        certificates=paths.certificates,
+        project_metrics=paths.project_metrics,
+        applications=paths.applications,
+        reports=paths.reports,
+        pending_ai_os_updates=paths.pending_ai_os_updates,
+        data=paths.data,
+        database=paths.database,
+        marker=paths.marker,
+        lock=paths.lock,
+    )
+    with pytest.raises(WorkspaceSafetyError):
+        with workspace_lock(forged):
+            pass
