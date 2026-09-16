@@ -386,7 +386,7 @@ def test_sidecar_fchmod_failure_does_not_leak_descriptor(
     def fail_first_sidecar(descriptor: int, mode: int) -> None:
         nonlocal calls
         calls += 1
-        if calls == 2:
+        if calls == 3:
             raise OSError("injected sidecar chmod failure")
         real_fchmod(descriptor, mode)
 
@@ -394,3 +394,34 @@ def test_sidecar_fchmod_failure_does_not_leak_descriptor(
     with pytest.raises(DatabaseError):
         JobStore.open(paths.database, paths.marker.read_text(encoding="utf-8"))
     assert len(os.listdir("/dev/fd")) == before
+
+
+def test_open_store_rejects_replaced_canonical_data_directory(workspace) -> None:
+    paths, _ = workspace
+    raw_marker = paths.marker.read_text(encoding="utf-8")
+    store = JobStore.open(paths.database, raw_marker)
+    store.upsert_job(_job(), expected_revision=0)
+    old_data = paths.root / "data-old"
+    paths.data.rename(old_data)
+    paths.data.mkdir(mode=0o700)
+
+    with pytest.raises(DatabaseError):
+        store.current_revision()
+    store.close()
+
+
+def test_open_store_rejects_replaced_workspace_with_same_marker(workspace) -> None:
+    paths, _ = workspace
+    raw_marker = paths.marker.read_bytes()
+    store = JobStore.open(paths.database, raw_marker.decode())
+    store.upsert_job(_job(), expected_revision=0)
+    old_root = paths.root.with_name("Career-old")
+    paths.root.rename(old_root)
+    replacement = WorkspacePaths.from_root(paths.root)
+    bootstrap_private_workspace(replacement)
+    replacement.marker.write_bytes(raw_marker)
+    replacement.marker.chmod(0o600)
+
+    with pytest.raises(DatabaseError):
+        store.current_revision()
+    store.close()

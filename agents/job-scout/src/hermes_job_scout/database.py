@@ -51,6 +51,7 @@ class MarkerMismatch(DatabaseError):
 ModelT = TypeVar("ModelT")
 
 _PRIVATE_MODE = 0o600
+_PRIVATE_DIRECTORY_MODE = 0o700
 _EXPECTED_COLUMNS = {
     "schema_meta": ("key", "value"),
     "workspace_state": ("workspace_id", "revision"),
@@ -406,7 +407,44 @@ class JobStore:
     def _validate_main_file_identity(self) -> None:
         self._validate_fd_entry(self._database_fd, self.path.name)
 
+    def _validate_workspace_chain(self) -> None:
+        current_root_fd: int | None = None
+        current_data_fd: int | None = None
+        try:
+            current_root_fd, marker = _open_workspace_root(
+                self.paths.root, expected_workspace_id=self.marker.workspace_id
+            )
+            if marker != self.marker:
+                raise DatabaseError("canonical workspace marker changed")
+            held_root = os.fstat(self._root_fd)
+            current_root = os.fstat(current_root_fd)
+            if (
+                not stat.S_ISDIR(current_root.st_mode)
+                or stat.S_IMODE(current_root.st_mode) != _PRIVATE_DIRECTORY_MODE
+                or (held_root.st_dev, held_root.st_ino)
+                != (current_root.st_dev, current_root.st_ino)
+            ):
+                raise DatabaseError("canonical workspace root identity changed")
+            current_data_fd = _open_relative_directory_fd(current_root_fd, PurePosixPath("data"))
+            held_data = os.fstat(self._data_fd)
+            current_data = os.fstat(current_data_fd)
+            if (
+                not stat.S_ISDIR(current_data.st_mode)
+                or stat.S_IMODE(current_data.st_mode) != _PRIVATE_DIRECTORY_MODE
+                or (held_data.st_dev, held_data.st_ino)
+                != (current_data.st_dev, current_data.st_ino)
+            ):
+                raise DatabaseError("canonical data directory identity changed")
+        except WorkspaceSafetyError as exc:
+            raise DatabaseError("canonical workspace chain is unsafe") from exc
+        finally:
+            if current_data_fd is not None:
+                os.close(current_data_fd)
+            if current_root_fd is not None:
+                os.close(current_root_fd)
+
     def _secure_and_hold_storage_files(self) -> None:
+        self._validate_workspace_chain()
         self._validate_main_file_identity()
         expected = {f"{self.path.name}-wal", f"{self.path.name}-shm"}
         if set(self._sidecar_fds) != expected:
@@ -415,6 +453,7 @@ class JobStore:
             self._validate_fd_entry(descriptor, name)
 
     def _validate_storage_identity(self) -> None:
+        self._validate_workspace_chain()
         self._validate_main_file_identity()
         for name, descriptor in self._sidecar_fds.items():
             self._validate_fd_entry(descriptor, name)
