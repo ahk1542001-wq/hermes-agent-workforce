@@ -524,10 +524,31 @@ class JobStore:
             self._validate_workspace_chain(expected_parent_mode=0o500, expected_root_mode=0o500)
             yield
         finally:
+            restore_errors: list[OSError] = []
             if root_frozen:
-                os.fchmod(self._root_fd, _PRIVATE_DIRECTORY_MODE)
+                error = self._restore_directory_mode(self._root_fd)
+                if error is not None:
+                    restore_errors.append(error)
             if parent_frozen:
-                os.fchmod(self._parent_fd, _PRIVATE_DIRECTORY_MODE)
+                error = self._restore_directory_mode(self._parent_fd)
+                if error is not None:
+                    restore_errors.append(error)
+            if restore_errors:
+                raise DatabaseError(
+                    "transaction outcome may be committed; workspace permission restoration failed"
+                ) from restore_errors[0]
+
+    @staticmethod
+    def _restore_directory_mode(descriptor: int) -> OSError | None:
+        last_error: OSError | None = None
+        for _ in range(3):
+            try:
+                os.fchmod(descriptor, _PRIVATE_DIRECTORY_MODE)
+                if stat.S_IMODE(os.fstat(descriptor).st_mode) == _PRIVATE_DIRECTORY_MODE:
+                    return None
+            except OSError as exc:
+                last_error = exc
+        return last_error or OSError("directory mode restoration did not take effect")
 
     def _secure_and_hold_storage_files(self) -> None:
         self._validate_workspace_chain()

@@ -494,3 +494,55 @@ def test_commit_trace_cannot_replace_data_directory(workspace) -> None:
     assert paths.root.stat().st_mode & 0o777 == 0o700
     assert paths.root.parent.stat().st_mode & 0o777 == 0o700
     store.close()
+
+
+@pytest.mark.parametrize("failed_call", [4, 5])
+def test_rename_barrier_retries_one_shot_restore_failure(
+    workspace, monkeypatch: pytest.MonkeyPatch, failed_call: int
+) -> None:
+    import hermes_job_scout.database as database_module
+
+    paths, _ = workspace
+    store = JobStore.open(paths.database, paths.marker.read_text(encoding="utf-8"))
+    real_fchmod = database_module.os.fchmod
+    calls = 0
+
+    def fail_once(descriptor: int, mode: int) -> None:
+        nonlocal calls
+        calls += 1
+        if calls == failed_call:
+            raise OSError("injected one-shot restore failure")
+        real_fchmod(descriptor, mode)
+
+    monkeypatch.setattr(database_module.os, "fchmod", fail_once)
+    store.upsert_job(_job(), expected_revision=0)
+
+    assert store.current_revision() == 1
+    assert paths.root.stat().st_mode & 0o777 == 0o700
+    assert paths.root.parent.stat().st_mode & 0o777 == 0o700
+    store.close()
+
+
+def test_persistent_root_restore_failure_still_restores_parent_and_is_typed(
+    workspace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import hermes_job_scout.database as database_module
+
+    paths, _ = workspace
+    store = JobStore.open(paths.database, paths.marker.read_text(encoding="utf-8"))
+    real_fchmod = database_module.os.fchmod
+
+    def fail_root_restore(descriptor: int, mode: int) -> None:
+        if descriptor == store._root_fd and mode == 0o700:
+            raise OSError("injected persistent root restore failure")
+        real_fchmod(descriptor, mode)
+
+    monkeypatch.setattr(database_module.os, "fchmod", fail_root_restore)
+    with pytest.raises(DatabaseError, match="transaction outcome may be committed"):
+        store.upsert_job(_job(), expected_revision=0)
+
+    assert paths.root.parent.stat().st_mode & 0o777 == 0o700
+    monkeypatch.undo()
+    os.fchmod(store._root_fd, 0o700)
+    assert store.current_revision() == 1
+    store.close()
