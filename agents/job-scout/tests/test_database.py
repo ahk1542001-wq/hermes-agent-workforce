@@ -425,3 +425,42 @@ def test_open_store_rejects_replaced_workspace_with_same_marker(workspace) -> No
     with pytest.raises(DatabaseError):
         store.current_revision()
     store.close()
+
+
+def test_transaction_rolls_back_if_data_directory_changes_before_commit(workspace) -> None:
+    paths, _ = workspace
+    raw_marker = paths.marker.read_text(encoding="utf-8")
+    store = JobStore.open(paths.database, raw_marker)
+    old_data = paths.root / "data-old"
+
+    with pytest.raises(DatabaseError):
+        with store.transaction(0) as transaction:
+            transaction.upsert_job(_job())
+            paths.data.rename(old_data)
+            paths.data.mkdir(mode=0o700)
+
+    with sqlite3.connect(old_data / "jobs.sqlite") as connection:
+        assert connection.execute("SELECT COUNT(*) FROM jobs").fetchone() == (0,)
+        assert connection.execute("SELECT revision FROM workspace_state").fetchone() == (0,)
+    store.close()
+
+
+def test_transaction_rolls_back_if_workspace_changes_before_commit(workspace) -> None:
+    paths, _ = workspace
+    raw_marker = paths.marker.read_bytes()
+    store = JobStore.open(paths.database, raw_marker.decode())
+    old_root = paths.root.with_name("Career-old")
+
+    with pytest.raises(DatabaseError):
+        with store.transaction(0) as transaction:
+            transaction.upsert_job(_job())
+            paths.root.rename(old_root)
+            replacement = WorkspacePaths.from_root(paths.root)
+            bootstrap_private_workspace(replacement)
+            replacement.marker.write_bytes(raw_marker)
+            replacement.marker.chmod(0o600)
+
+    with sqlite3.connect(old_root / "data" / "jobs.sqlite") as connection:
+        assert connection.execute("SELECT COUNT(*) FROM jobs").fetchone() == (0,)
+        assert connection.execute("SELECT revision FROM workspace_state").fetchone() == (0,)
+    store.close()

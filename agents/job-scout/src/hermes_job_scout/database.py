@@ -654,12 +654,14 @@ class JobStore:
                         )
                     transaction = _Transaction(self)
                     yield transaction
+                    self._validate_storage_identity()
                     if transaction.changed:
                         self._connection.execute(
                             "UPDATE workspace_state SET revision = revision + 1 "
                             "WHERE workspace_id = ?",
                             (str(self.marker.workspace_id),),
                         )
+                    self._validate_storage_identity()
                     self._connection.execute("COMMIT")
                 except Exception:
                     self._connection.execute("ROLLBACK")
