@@ -29,6 +29,7 @@ from .models import (
 )
 from .workspace import (
     WorkspaceSafetyError,
+    _open_absolute_directory,
     _open_relative_directory_fd,
     _open_workspace_root,
     read_private_bytes,
@@ -227,6 +228,7 @@ class JobStore:
         paths: WorkspacePaths,
         *,
         created: bool,
+        parent_fd: int,
         root_fd: int,
         data_fd: int,
         database_fd: int,
@@ -235,6 +237,7 @@ class JobStore:
         self.path = database
         self.marker = marker
         self.paths = paths
+        self._parent_fd = parent_fd
         self._root_fd = root_fd
         self._data_fd = data_fd
         self._database_fd = database_fd
@@ -285,9 +288,15 @@ class JobStore:
             raise MarkerMismatch("workspace marker does not match the supplied marker")
         try:
             with workspace_lock(paths, expected_workspace_id=supplied.workspace_id):
-                opened_root_fd, opened_marker = _open_workspace_root(
-                    paths.root, expected_workspace_id=supplied.workspace_id
-                )
+                opened_parent_fd = _open_absolute_directory(paths.root.parent)
+                try:
+                    opened_root_fd, opened_marker = _open_workspace_root(
+                        paths.root, expected_workspace_id=supplied.workspace_id
+                    )
+                except Exception:
+                    os.close(opened_parent_fd)
+                    raise
+                parent_fd: int | None = opened_parent_fd
                 root_fd: int | None = opened_root_fd
                 data_fd: int | None = None
                 database_fd: int | None = None
@@ -295,6 +304,17 @@ class JobStore:
                 try:
                     if opened_marker != supplied:
                         raise MarkerMismatch("workspace identity changed before database open")
+                    parent_root = os.stat(
+                        paths.root.name,
+                        dir_fd=opened_parent_fd,
+                        follow_symlinks=False,
+                    )
+                    held_root = os.fstat(opened_root_fd)
+                    if (parent_root.st_dev, parent_root.st_ino) != (
+                        held_root.st_dev,
+                        held_root.st_ino,
+                    ):
+                        raise DatabaseError("workspace parent/root identity mismatch")
                     data_fd = _open_relative_directory_fd(opened_root_fd, PurePosixPath("data"))
                     flags = os.O_RDWR | getattr(os, "O_NOFOLLOW", 0)
                     created = False
@@ -339,10 +359,12 @@ class JobStore:
                             if descriptor is not None:
                                 os.close(descriptor)
                     owned_root_fd = opened_root_fd
+                    owned_parent_fd = opened_parent_fd
                     owned_data_fd = data_fd
                     owned_database_fd = database_fd
                     owned_sidecar_fds = sidecar_fds
                     root_fd = None
+                    parent_fd = None
                     data_fd = None
                     database_fd = None
                     sidecar_fds = {}
@@ -351,6 +373,7 @@ class JobStore:
                         supplied,
                         paths,
                         created=created,
+                        parent_fd=owned_parent_fd,
                         root_fd=owned_root_fd,
                         data_fd=owned_data_fd,
                         database_fd=owned_database_fd,
@@ -365,6 +388,8 @@ class JobStore:
                         os.close(data_fd)
                     if root_fd is not None:
                         os.close(root_fd)
+                    if parent_fd is not None:
+                        os.close(parent_fd)
                     raise
         except (WorkspaceSafetyError, sqlite3.Error, OSError) as exc:
             raise DatabaseError("private workspace lock or database is invalid") from exc
@@ -377,7 +402,7 @@ class JobStore:
             os.close(descriptor)
         if hasattr(self, "_sidecar_fds"):
             self._sidecar_fds.clear()
-        for name in ("_database_fd", "_data_fd", "_root_fd"):
+        for name in ("_database_fd", "_data_fd", "_root_fd", "_parent_fd"):
             descriptor = getattr(self, name, None)
             if descriptor is not None:
                 os.close(descriptor)
@@ -407,20 +432,49 @@ class JobStore:
     def _validate_main_file_identity(self) -> None:
         self._validate_fd_entry(self._database_fd, self.path.name)
 
-    def _validate_workspace_chain(self) -> None:
+    def _validate_workspace_chain(
+        self,
+        *,
+        expected_parent_mode: int = _PRIVATE_DIRECTORY_MODE,
+        expected_root_mode: int = _PRIVATE_DIRECTORY_MODE,
+    ) -> None:
+        current_parent_fd: int | None = None
         current_root_fd: int | None = None
         current_data_fd: int | None = None
         try:
-            current_root_fd, marker = _open_workspace_root(
-                self.paths.root, expected_workspace_id=self.marker.workspace_id
-            )
-            if marker != self.marker:
-                raise DatabaseError("canonical workspace marker changed")
+            current_parent_fd = _open_absolute_directory(self.paths.root.parent)
+            if expected_root_mode == _PRIVATE_DIRECTORY_MODE:
+                current_root_fd, marker = _open_workspace_root(
+                    self.paths.root, expected_workspace_id=self.marker.workspace_id
+                )
+                if marker != self.marker:
+                    raise DatabaseError("canonical workspace marker changed")
+            else:
+                current_root_fd = _open_absolute_directory(self.paths.root)
             held_root = os.fstat(self._root_fd)
+            held_parent = os.fstat(self._parent_fd)
+            current_parent = os.fstat(current_parent_fd)
             current_root = os.fstat(current_root_fd)
             if (
+                not stat.S_ISDIR(current_parent.st_mode)
+                or stat.S_IMODE(current_parent.st_mode) != expected_parent_mode
+                or (held_parent.st_dev, held_parent.st_ino)
+                != (current_parent.st_dev, current_parent.st_ino)
+            ):
+                raise DatabaseError("canonical workspace parent identity changed")
+            parent_root = os.stat(
+                self.paths.root.name,
+                dir_fd=current_parent_fd,
+                follow_symlinks=False,
+            )
+            if (parent_root.st_dev, parent_root.st_ino) != (
+                current_root.st_dev,
+                current_root.st_ino,
+            ):
+                raise DatabaseError("canonical parent/root link changed")
+            if (
                 not stat.S_ISDIR(current_root.st_mode)
-                or stat.S_IMODE(current_root.st_mode) != _PRIVATE_DIRECTORY_MODE
+                or stat.S_IMODE(current_root.st_mode) != expected_root_mode
                 or (held_root.st_dev, held_root.st_ino)
                 != (current_root.st_dev, current_root.st_ino)
             ):
@@ -442,6 +496,38 @@ class JobStore:
                 os.close(current_data_fd)
             if current_root_fd is not None:
                 os.close(current_root_fd)
+            if current_parent_fd is not None:
+                os.close(current_parent_fd)
+
+    @contextmanager
+    def _rename_barrier(self) -> Iterator[None]:
+        parent_info = os.fstat(self._parent_fd)
+        root_info = os.fstat(self._root_fd)
+        if (
+            stat.S_IMODE(parent_info.st_mode) != _PRIVATE_DIRECTORY_MODE
+            or stat.S_IMODE(root_info.st_mode) != _PRIVATE_DIRECTORY_MODE
+        ):
+            raise DatabaseError("workspace rename barrier requires 0700 parent and root")
+        root_frozen = False
+        parent_frozen = False
+        try:
+            try:
+                os.fchmod(self._root_fd, 0o500)
+            except OSError as exc:
+                raise DatabaseError("cannot freeze workspace root") from exc
+            root_frozen = True
+            try:
+                os.fchmod(self._parent_fd, 0o500)
+            except OSError as exc:
+                raise DatabaseError("cannot freeze workspace parent") from exc
+            parent_frozen = True
+            self._validate_workspace_chain(expected_parent_mode=0o500, expected_root_mode=0o500)
+            yield
+        finally:
+            if root_frozen:
+                os.fchmod(self._root_fd, _PRIVATE_DIRECTORY_MODE)
+            if parent_frozen:
+                os.fchmod(self._parent_fd, _PRIVATE_DIRECTORY_MODE)
 
     def _secure_and_hold_storage_files(self) -> None:
         self._validate_workspace_chain()
@@ -452,8 +538,16 @@ class JobStore:
         for name, descriptor in self._sidecar_fds.items():
             self._validate_fd_entry(descriptor, name)
 
-    def _validate_storage_identity(self) -> None:
-        self._validate_workspace_chain()
+    def _validate_storage_identity(
+        self,
+        *,
+        expected_parent_mode: int = _PRIVATE_DIRECTORY_MODE,
+        expected_root_mode: int = _PRIVATE_DIRECTORY_MODE,
+    ) -> None:
+        self._validate_workspace_chain(
+            expected_parent_mode=expected_parent_mode,
+            expected_root_mode=expected_root_mode,
+        )
         self._validate_main_file_identity()
         for name, descriptor in self._sidecar_fds.items():
             self._validate_fd_entry(descriptor, name)
@@ -645,27 +739,36 @@ class JobStore:
         try:
             with workspace_lock(self.paths, expected_workspace_id=self.marker.workspace_id):
                 self._validate_storage_identity()
-                self._connection.execute("BEGIN IMMEDIATE")
-                try:
-                    actual = self._current_revision_unlocked()
-                    if actual != expected_revision:
-                        raise RevisionConflict(
-                            f"expected revision {expected_revision}, current revision is {actual}"
+                with self._rename_barrier():
+                    self._validate_storage_identity(
+                        expected_parent_mode=0o500, expected_root_mode=0o500
+                    )
+                    self._connection.execute("BEGIN IMMEDIATE")
+                    try:
+                        actual = self._current_revision_unlocked()
+                        if actual != expected_revision:
+                            raise RevisionConflict(
+                                f"expected revision {expected_revision}, "
+                                f"current revision is {actual}"
+                            )
+                        transaction = _Transaction(self)
+                        yield transaction
+                        self._validate_storage_identity(
+                            expected_parent_mode=0o500, expected_root_mode=0o500
                         )
-                    transaction = _Transaction(self)
-                    yield transaction
-                    self._validate_storage_identity()
-                    if transaction.changed:
-                        self._connection.execute(
-                            "UPDATE workspace_state SET revision = revision + 1 "
-                            "WHERE workspace_id = ?",
-                            (str(self.marker.workspace_id),),
+                        if transaction.changed:
+                            self._connection.execute(
+                                "UPDATE workspace_state SET revision = revision + 1 "
+                                "WHERE workspace_id = ?",
+                                (str(self.marker.workspace_id),),
+                            )
+                        self._validate_storage_identity(
+                            expected_parent_mode=0o500, expected_root_mode=0o500
                         )
-                    self._validate_storage_identity()
-                    self._connection.execute("COMMIT")
-                except Exception:
-                    self._connection.execute("ROLLBACK")
-                    raise
+                        self._connection.execute("COMMIT")
+                    except Exception:
+                        self._connection.execute("ROLLBACK")
+                        raise
         except RevisionConflict:
             raise
         except (WorkspaceSafetyError, sqlite3.Error) as exc:
