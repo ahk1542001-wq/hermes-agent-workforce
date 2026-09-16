@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import ipaddress
 import json
 import re
 import unicodedata
@@ -59,11 +60,22 @@ def canonicalize_url(url: str) -> str:
     if parts.username is not None or parts.password is not None:
         raise ValueError("URLs with embedded credentials are not accepted")
     host = parts.hostname.lower().rstrip(".")
+    if ":" in host:
+        try:
+            host = ipaddress.IPv6Address(host).compressed
+        except ipaddress.AddressValueError as exc:
+            raise ValueError("URL hostname is malformed") from exc
+        rendered_host = f"[{host}]"
+    else:
+        try:
+            rendered_host = host.encode("idna").decode("ascii")
+        except UnicodeError as exc:
+            raise ValueError("URL hostname is malformed") from exc
     try:
-        host = host.encode("idna").decode("ascii")
-    except UnicodeError as exc:
-        raise ValueError("URL hostname is malformed") from exc
-    netloc = host if parts.port is None else f"{host}:{parts.port}"
+        port = parts.port
+    except ValueError as exc:
+        raise ValueError("URL port is malformed") from exc
+    netloc = rendered_host if port is None else f"{rendered_host}:{port}"
     query_pairs = [
         (key, value)
         for key, value in parse_qsl(parts.query, keep_blank_values=True)
@@ -89,6 +101,9 @@ def normalize_job(raw: Mapping[str, Any], retrieved_at: datetime) -> JobRecord:
     try:
         stable_url = canonicalize_url(raw["stable_url"])
         authority = _authority_for_url(stable_url)
+        supplied_source_type = raw.get("source_type")
+        if supplied_source_type is not None and supplied_source_type != authority.value:
+            raise ValueError("source_type conflicts with classified source authority")
         description = _clean_text(raw["description"])
         record = JobRecord(
             job_id=_clean_text(raw["job_id"]),
@@ -120,9 +135,7 @@ def normalize_job(raw: Mapping[str, Any], retrieved_at: datetime) -> JobRecord:
         raise ValueError("job input failed strict normalization") from exc
     description_hash = hashlib.sha256(description.encode("utf-8")).hexdigest()
     fingerprint = _fingerprint_parts(record, description_hash)
-    object.__setattr__(record, "fingerprint", fingerprint)
-    record.__dict__["_description_hash"] = description_hash
-    return record
+    return record.model_copy(update={"fingerprint": fingerprint})
 
 
 def _clean_list(value: Any) -> list[str]:
@@ -150,9 +163,11 @@ def _fingerprint_parts(record: JobRecord, description_hash: str) -> str:
 
 
 def content_fingerprint(record: JobRecord) -> str:
-    """Compute the stable content identity for an already-normalized record."""
+    """Return the persisted content identity for an already-normalized record."""
 
-    return _fingerprint_parts(record, record.__dict__.get("_description_hash", ""))
+    if not isinstance(record, JobRecord):
+        raise ValueError("record must be a JobRecord")
+    return record.fingerprint
 
 
 @dataclass(frozen=True)
@@ -185,10 +200,21 @@ def deduplicate(records: Sequence[JobRecord]) -> DeduplicationResult:
     if not isinstance(records, Sequence) or isinstance(records, (str, bytes)):
         raise ValueError("records must be a sequence")
     grouped: dict[str, list[JobRecord]] = {}
+    identities: dict[str, tuple[str, str, str, str]] = {}
     order: list[str] = []
     for record in records:
         if not isinstance(record, JobRecord):
             raise ValueError("records must contain JobRecord values")
+        identity = (
+            _clean_text(record.company).casefold(),
+            _clean_text(record.role).casefold(),
+            _clean_text(record.location).casefold(),
+            _clean_text(record.job_id).casefold(),
+        )
+        prior_identity = identities.get(record.fingerprint)
+        if prior_identity is not None and prior_identity != identity:
+            raise ValueError("fingerprint collision or stale normalized record")
+        identities[record.fingerprint] = identity
         if record.fingerprint not in grouped:
             grouped[record.fingerprint] = []
             order.append(record.fingerprint)

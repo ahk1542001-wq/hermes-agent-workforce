@@ -274,6 +274,8 @@ class EvidenceRef(StrictModel):
 
 
 class JobRecord(StrictModel):
+    model_config = ConfigDict(frozen=True)
+
     job_id: str = Field(min_length=1, max_length=120)
     stable_url: HttpUrl
     source_type: str = Field(min_length=1, max_length=80)
@@ -309,6 +311,27 @@ class JobRecord(StrictModel):
             and self.posted_at > self.closes_at
         ):
             raise ValueError("posted_at cannot exceed closes_at")
+        unverified_authorities = {
+            SourceAuthority.DISCOVERY_HINT,
+            SourceAuthority.NEEDS_VERIFICATION,
+        }
+        verified_states = {
+            JobState.VERIFIED,
+            JobState.QUALIFIED,
+            JobState.SHORTLISTED,
+            JobState.SELECTED,
+            JobState.PACK_DRAFTED,
+            JobState.PACK_REVIEWED,
+            JobState.PACK_APPROVED,
+            JobState.SUBMITTING,
+            JobState.SUBMITTED,
+            JobState.FOLLOW_UP_DUE,
+            JobState.CLOSED,
+        }
+        if self.authority in unverified_authorities and (
+            self.state in verified_states or self.owner_decision is Decision.QUALIFIED
+        ):
+            raise ValueError("unverified source authority cannot become verified or qualified")
         return self
 
 

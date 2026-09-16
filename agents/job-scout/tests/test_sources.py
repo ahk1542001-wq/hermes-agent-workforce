@@ -36,6 +36,16 @@ def test_parses_hermes_search_success_envelope() -> None:
 
 def test_search_failures_and_unknown_fields_fail_closed() -> None:
     with pytest.raises(SourceEnvelopeError):
+        parse_search_envelope("not-a-mapping", "tavily", "q", NOW)
+    with pytest.raises(SourceEnvelopeError):
+        parse_search_envelope({"success": False, "data": {"web": []}}, "tavily", "q", NOW)
+    with pytest.raises(SourceEnvelopeError):
+        parse_search_envelope({"success": True, "data": {"web": {}}}, "tavily", "q", NOW)
+    with pytest.raises(SourceEnvelopeError):
+        parse_search_envelope(
+            {"success": True, "data": {"web": ["not-a-mapping"]}}, "tavily", "q", NOW
+        )
+    with pytest.raises(SourceEnvelopeError):
         parse_search_envelope({"success": False, "error": "quota"}, "tavily", "q", NOW)
     with pytest.raises(SourceEnvelopeError):
         parse_search_envelope(
@@ -92,6 +102,27 @@ def test_parses_extract_results_and_rejects_oversized_content() -> None:
         parse_extract_envelope(
             {"success": False, "error": "provider unavailable"}, "firecrawl", NOW
         )
+    with pytest.raises(SourceEnvelopeError):
+        parse_extract_envelope({"results": {}}, "firecrawl", NOW)
+    with pytest.raises(SourceEnvelopeError):
+        parse_extract_envelope({"results": ["not-a-mapping"]}, "firecrawl", NOW)
+    with pytest.raises(SourceEnvelopeError):
+        parse_extract_envelope({"results": [{"url": "https://example.com"}]}, "firecrawl", NOW)
+    with pytest.raises(SourceEnvelopeError):
+        parse_extract_envelope(
+            {
+                "results": [
+                    {
+                        "url": "https://example.com",
+                        "title": "x",
+                        "content": "",
+                        "error": "blocked",
+                    }
+                ]
+            },
+            "firecrawl",
+            NOW,
+        )
 
 
 def test_authority_rules_are_conservative() -> None:
@@ -107,5 +138,27 @@ def test_authority_rules_are_conservative() -> None:
         classify_source_authority("https://boards.greenhouse.io/example/jobs/1")
         is SourceAuthority.ATS
     )
+    assert (
+        classify_source_authority("https://ashbyhq.com/privacy")
+        is SourceAuthority.NEEDS_VERIFICATION
+    )
+    assert (
+        classify_source_authority("https://foo.icims.com/anything")
+        is SourceAuthority.NEEDS_VERIFICATION
+    )
+    assert (
+        classify_source_authority("https://www.smartrecruiters.com/resources/blog")
+        is SourceAuthority.NEEDS_VERIFICATION
+    )
+    assert (
+        classify_source_authority("https://jobs.smartrecruiters.com/Example/123-title")
+        is SourceAuthority.ATS
+    )
+    assert (
+        classify_source_authority("https://example.com/privacy")
+        is SourceAuthority.NEEDS_VERIFICATION
+    )
     unknown = classify_source_authority("https://careers.unknown.test/jobs/1")
     assert unknown is SourceAuthority.NEEDS_VERIFICATION
+    with pytest.raises(SourceEnvelopeError):
+        classify_source_authority("not-a-url")

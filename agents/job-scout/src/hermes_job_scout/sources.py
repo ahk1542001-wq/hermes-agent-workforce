@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 import unicodedata
 from collections.abc import Mapping
 from datetime import datetime
@@ -25,20 +26,21 @@ _SEARCH_ITEM_KEYS = {"title", "url", "description", "position"}
 _EXTRACT_KEYS = {"results"}
 _EXTRACT_ITEM_KEYS = {"url", "title", "content", "metadata", "error"}
 AUTHORITY_RULES_VERSION = "2026-09-v1"
-_ATS_HOSTS = {
-    "boards.greenhouse.io",
-    "jobs.lever.co",
-    "jobs.ashbyhq.com",
-    "ashbyhq.com",
-    "myworkdayjobs.com",
-    "smartrecruiters.com",
-    "boards.jobvite.com",
-    "jobs.bamboohr.com",
-    "icims.com",
-    "recruitee.com",
-    "applytojob.com",
+_ATS_JOB_PATHS = {
+    "boards.greenhouse.io": re.compile(r"^/[^/]+/jobs/[^/]+/?$", re.IGNORECASE),
+    "jobs.lever.co": re.compile(r"^/[^/]+/[^/]+/?$", re.IGNORECASE),
+    "jobs.ashbyhq.com": re.compile(r"^/[^/]+/[^/]+/?$", re.IGNORECASE),
+    "myworkdayjobs.com": re.compile(r"^/.*/job/[^/]+(?:/[^/]+)?/?$", re.IGNORECASE),
+    "jobs.smartrecruiters.com": re.compile(r"^/[^/]+/[^/]+/?$", re.IGNORECASE),
+    "boards.jobvite.com": re.compile(r"^/[^/]+/job/[^/]+/?$", re.IGNORECASE),
+    "bamboohr.com": re.compile(r"^/careers/[^/]+/?$", re.IGNORECASE),
+    "icims.com": re.compile(r"^/jobs/[^/]+(?:/[^/]+)?/?$", re.IGNORECASE),
+    "recruitee.com": re.compile(r"^/o/[^/]+/?$", re.IGNORECASE),
+    "applytojob.com": re.compile(r"^/apply/[^/]+(?:/[^/]+)?/?$", re.IGNORECASE),
 }
-_VERIFIED_EMPLOYER_DOMAINS = {"example.com"}
+_VERIFIED_EMPLOYER_JOB_PATHS = {
+    "example.com": re.compile(r"^/(?:jobs|roles)/[^/]+/?$", re.IGNORECASE),
+}
 _DISCOVERY_HOSTS = {
     "linkedin.com",
     "indeed.com",
@@ -150,18 +152,33 @@ def _host_matches(host: str, domain: str) -> bool:
     return host == domain or host.endswith("." + domain)
 
 
+def _is_ats_job_url(host: str, path: str) -> bool:
+    return any(
+        _host_matches(host, domain) and pattern.fullmatch(path)
+        for domain, pattern in _ATS_JOB_PATHS.items()
+    )
+
+
+def _is_verified_employer_job_url(host: str, path: str) -> bool:
+    return any(
+        _host_matches(host, domain) and pattern.fullmatch(path)
+        for domain, pattern in _VERIFIED_EMPLOYER_JOB_PATHS.items()
+    )
+
+
 def classify_source_authority(url: str) -> SourceAuthority:
     """Classify a URL using conservative, versioned public-host rules."""
 
     try:
         canonical = canonicalize_url(url)
-        host = (urlsplit(canonical).hostname or "").lower().rstrip(".")
+        parts = urlsplit(canonical)
+        host = (parts.hostname or "").lower().rstrip(".")
     except (TypeError, ValueError) as exc:
         raise SourceEnvelopeError("source URL is malformed") from exc
     if any(_host_matches(host, domain) for domain in _DISCOVERY_HOSTS):
         return SourceAuthority.DISCOVERY_HINT
-    if any(_host_matches(host, domain) for domain in _ATS_HOSTS):
+    if _is_ats_job_url(host, parts.path):
         return SourceAuthority.ATS
-    if any(_host_matches(host, domain) for domain in _VERIFIED_EMPLOYER_DOMAINS):
+    if _is_verified_employer_job_url(host, parts.path):
         return SourceAuthority.OFFICIAL
     return SourceAuthority.NEEDS_VERIFICATION

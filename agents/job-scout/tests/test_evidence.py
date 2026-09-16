@@ -63,7 +63,43 @@ def test_evidence_pack_loads_one_profile_block_and_binds_complete_markdown(tmp_p
 
     assert pack.candidate_profile.candidate_id == "candidate-example"
     assert len(pack.pack_sha256) == 64
+    assert pack.profile is pack.candidate_profile
+    assert pack.sha256 == pack.pack_sha256
     assert pack.raw_markdown == pack_path.read_bytes()
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"pack_sha256": "not-a-sha256"},
+        {"approved_at": datetime(2026, 9, 16, 9, 0)},
+        {"pack_relative_path": "../outside.md"},
+    ],
+)
+def test_evidence_approval_rejects_malformed_bindings(overrides: dict[str, object]) -> None:
+    payload: dict[str, object] = {
+        "pack_sha256": "a" * 64,
+        "approved_at": NOW,
+        "approved_by": "owner",
+        "schema_version": 1,
+        "workspace_id": "11111111-1111-4111-8111-111111111111",
+        "pack_relative_path": "master/candidate-facts-private.md",
+    }
+    payload.update(overrides)
+    with pytest.raises(ValidationError):
+        EvidenceApproval.model_validate(payload)
+
+
+def test_evidence_pack_rejects_invalid_utf8_and_profile_json(tmp_path: Path) -> None:
+    paths = WorkspacePaths.from_root(tmp_path / "Career")
+    bootstrap_private_workspace(paths)
+    pack_path = paths.master / "candidate-facts-private.md"
+    atomic_write_private(pack_path, b"# Evidence\n\n```json\n\xff\n```\n")
+    with pytest.raises(EvidencePackError, match="UTF-8"):
+        load_evidence_pack(pack_path)
+    atomic_write_private(pack_path, b"# Evidence\n\n```json\n{broken}\n```\n")
+    with pytest.raises(EvidencePackError, match="CandidateProfile"):
+        load_evidence_pack(pack_path)
 
 
 def test_changed_pack_invalidates_owner_approval(tmp_path: Path) -> None:

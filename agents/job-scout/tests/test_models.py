@@ -10,11 +10,13 @@ from hermes_job_scout.models import (
     ApprovalGrant,
     CandidateEvidencePack,
     CandidateProfile,
+    Decision,
     DiscoveryHint,
     DiscoveryRun,
     EvidenceRef,
     FitScore,
     JobRecord,
+    JobState,
     SearchPolicy,
     SourceAuthority,
     SourceRecord,
@@ -120,6 +122,16 @@ def test_discovery_hint_cannot_claim_official_verification() -> None:
             position=1,
             retrieved_at=NOW,
             authority="official",
+        )
+    with pytest.raises(ValidationError):
+        DiscoveryHint(
+            provider="synthetic-search",
+            query="AI automation engineer remote",
+            title="AI Automation Engineer",
+            url="https://example.com/jobs/automation",
+            position=1,
+            retrieved_at=NOW,
+            authority=SourceAuthority.OFFICIAL,
         )
 
 
@@ -261,6 +273,30 @@ def test_discovery_run_records_auditable_result_and_tool_counts() -> None:
         )
 
 
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"coverage": "unknown"},
+        {"failed_source_ids": ["source-b"]},
+        {"completed_at": NOW - timedelta(seconds=1)},
+    ],
+)
+def test_discovery_run_rejects_invalid_run_relationships(overrides: dict[str, object]) -> None:
+    payload: dict[str, object] = {
+        "run_id": "run-invalid-relationship",
+        "started_at": NOW,
+        "completed_at": NOW,
+        "coverage": "full",
+        "checked_source_ids": ["source-a"],
+        "failed_source_ids": [],
+        "changed_count": 0,
+        "provider": "synthetic-search",
+    }
+    payload.update(overrides)
+    with pytest.raises(ValidationError):
+        DiscoveryRun.model_validate(payload)
+
+
 def test_approval_cannot_exceed_24_hours() -> None:
     issued = datetime(2026, 9, 15, tzinfo=timezone.utc)
     with pytest.raises(ValidationError):
@@ -272,6 +308,35 @@ def test_approval_cannot_exceed_24_hours() -> None:
             attachment_sha256=["b" * 64],
             issued_at=issued,
             expires_at=issued + timedelta(hours=25),
+        )
+    with pytest.raises(ValidationError):
+        ApprovalGrant(
+            approval_id="approval-2",
+            job_id="job-1",
+            recipient="jobs@example.com",
+            payload_sha256="a" * 64,
+            attachment_sha256=["not-a-sha256"],
+            issued_at=issued,
+            expires_at=issued + timedelta(hours=1),
+        )
+    with pytest.raises(ValidationError):
+        ApprovalGrant(
+            approval_id="approval-3",
+            job_id="job-1",
+            recipient="jobs@example.com",
+            payload_sha256="a" * 64,
+            issued_at=issued,
+            expires_at=issued,
+        )
+
+
+def test_naive_model_timestamp_is_rejected() -> None:
+    with pytest.raises(ValidationError):
+        EvidenceRef(
+            field="role",
+            excerpt="AI automation",
+            source_url="https://example.com/jobs/automation",
+            retrieved_at=datetime(2026, 9, 15, 8, 0),
         )
 
 
@@ -320,6 +385,38 @@ def test_source_and_job_timestamps_cannot_move_backwards() -> None:
             remote_region="global",
             experience="0-3 years",
             fingerprint="b" * 64,
+        )
+
+
+@pytest.mark.parametrize(
+    ("state", "decision"),
+    [
+        (JobState.VERIFIED, Decision.NEEDS_VICTOR),
+        (JobState.DISCOVERED, Decision.QUALIFIED),
+    ],
+)
+def test_unverified_authority_cannot_be_verified_or_qualified(
+    state: JobState, decision: Decision
+) -> None:
+    with pytest.raises(ValidationError, match="unverified source authority"):
+        JobRecord.model_validate(
+            {
+                "job_id": "job-unverified",
+                "stable_url": "https://www.linkedin.com/jobs/view/1",
+                "source_type": "discovery_hint",
+                "authority": SourceAuthority.DISCOVERY_HINT,
+                "company": "Example Automation Labs",
+                "role": "AI Automation Engineer",
+                "first_seen_at": NOW,
+                "last_verified_at": NOW,
+                "work_type": WorkType.FULL_TIME,
+                "location": "Worldwide",
+                "remote_region": "global",
+                "experience": "0-3 years",
+                "fingerprint": "c" * 64,
+                "state": state,
+                "owner_decision": decision,
+            }
         )
 
 
