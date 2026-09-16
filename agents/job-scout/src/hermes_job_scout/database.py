@@ -91,6 +91,74 @@ _EXPECTED_TRIGGER_SQL = {
         "BEGIN SELECT RAISE(ABORT, 'application events are append-only'); END"
     ),
 }
+_EXPECTED_TABLE_SQL = {
+    "schema_meta": """
+        CREATE TABLE schema_meta (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        )
+    """,
+    "workspace_state": """
+        CREATE TABLE workspace_state (
+            workspace_id TEXT PRIMARY KEY,
+            revision INTEGER NOT NULL CHECK (revision >= 0)
+        )
+    """,
+    "jobs": """
+        CREATE TABLE jobs (
+            job_id TEXT PRIMARY KEY,
+            canonical_url TEXT NOT NULL UNIQUE,
+            fingerprint TEXT NOT NULL UNIQUE,
+            payload TEXT NOT NULL
+        )
+    """,
+    "application_events": """
+        CREATE TABLE application_events (
+            sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+            event_id TEXT NOT NULL UNIQUE,
+            job_id TEXT NOT NULL REFERENCES jobs(job_id),
+            payload TEXT NOT NULL
+        )
+    """,
+    "approvals": """
+        CREATE TABLE approvals (
+            approval_id TEXT PRIMARY KEY,
+            job_id TEXT NOT NULL REFERENCES jobs(job_id),
+            payload TEXT NOT NULL
+        )
+    """,
+    "source_registry": """
+        CREATE TABLE source_registry (
+            source_id TEXT PRIMARY KEY,
+            payload TEXT NOT NULL
+        )
+    """,
+    "discovery_runs": """
+        CREATE TABLE discovery_runs (
+            run_id TEXT PRIMARY KEY,
+            payload TEXT NOT NULL
+        )
+    """,
+    "run_metrics": """
+        CREATE TABLE run_metrics (
+            run_id TEXT PRIMARY KEY REFERENCES discovery_runs(run_id),
+            provider TEXT NOT NULL,
+            coverage TEXT NOT NULL,
+            changed_count INTEGER NOT NULL,
+            checked_source_count INTEGER NOT NULL,
+            failed_source_count INTEGER NOT NULL,
+            result_count INTEGER NOT NULL,
+            tokens_used INTEGER,
+            tool_calls INTEGER NOT NULL,
+            query_count INTEGER NOT NULL,
+            pages_checked INTEGER NOT NULL,
+            cache_hits INTEGER NOT NULL,
+            free_credits_remaining TEXT NOT NULL,
+            model_calls INTEGER NOT NULL,
+            actual_search_retrieval_spend_usd TEXT NOT NULL
+        )
+    """,
+}
 _REQUIRED_UNIQUE_COLUMNS = {
     "jobs": {("canonical_url",), ("fingerprint",)},
     "application_events": {("event_id",)},
@@ -240,28 +308,35 @@ class JobStore:
                         )
                         created = True
                     info = os.fstat(database_fd)
-                    if not stat.S_ISREG(info.st_mode):
-                        raise DatabaseError("database must be a regular file")
+                    if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+                        raise DatabaseError("database must be a single-link regular file")
                     os.fchmod(database_fd, _PRIVATE_MODE)
                     for name in (
                         f"{paths.database.name}-wal",
                         f"{paths.database.name}-shm",
                     ):
+                        descriptor: int | None = None
                         try:
-                            descriptor = os.open(name, flags, dir_fd=data_fd)
-                        except FileNotFoundError:
-                            descriptor = os.open(
-                                name,
-                                flags | os.O_CREAT | os.O_EXCL,
-                                _PRIVATE_MODE,
-                                dir_fd=data_fd,
-                            )
-                        sidecar_info = os.fstat(descriptor)
-                        if not stat.S_ISREG(sidecar_info.st_mode):
-                            os.close(descriptor)
-                            raise DatabaseError(f"SQLite sidecar is not a regular file: {name}")
-                        os.fchmod(descriptor, _PRIVATE_MODE)
-                        sidecar_fds[name] = descriptor
+                            try:
+                                descriptor = os.open(name, flags, dir_fd=data_fd)
+                            except FileNotFoundError:
+                                descriptor = os.open(
+                                    name,
+                                    flags | os.O_CREAT | os.O_EXCL,
+                                    _PRIVATE_MODE,
+                                    dir_fd=data_fd,
+                                )
+                            sidecar_info = os.fstat(descriptor)
+                            if not stat.S_ISREG(sidecar_info.st_mode) or sidecar_info.st_nlink != 1:
+                                raise DatabaseError(
+                                    f"SQLite sidecar is not a single-link regular file: {name}"
+                                )
+                            os.fchmod(descriptor, _PRIVATE_MODE)
+                            sidecar_fds[name] = descriptor
+                            descriptor = None
+                        finally:
+                            if descriptor is not None:
+                                os.close(descriptor)
                     owned_root_fd = opened_root_fd
                     owned_data_fd = data_fd
                     owned_database_fd = database_fd
@@ -321,6 +396,8 @@ class JobStore:
             raise DatabaseError(f"private database file is unavailable: {name}") from exc
         if (
             not stat.S_ISREG(current.st_mode)
+            or held.st_nlink != 1
+            or current.st_nlink != 1
             or (held.st_dev, held.st_ino) != (current.st_dev, current.st_ino)
             or stat.S_IMODE(current.st_mode) != _PRIVATE_MODE
         ):
@@ -357,6 +434,17 @@ class JobStore:
             )
             if columns != expected_columns:
                 raise DatabaseError(f"database table shape is invalid: {table}")
+        table_sql = {
+            row[0]: row[1]
+            for row in self._connection.execute(
+                "SELECT name, sql FROM sqlite_master "
+                "WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+            )
+        }
+        for name, expected_sql in _EXPECTED_TABLE_SQL.items():
+            actual_sql = table_sql.get(name)
+            if actual_sql is None or _normalize_sql(actual_sql) != _normalize_sql(expected_sql):
+                raise DatabaseError(f"database table contract is invalid: {name}")
         trigger_sql = {
             row[0]: row[1]
             for row in self._connection.execute(

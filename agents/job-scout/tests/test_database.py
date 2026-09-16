@@ -323,3 +323,74 @@ def test_reopen_rejects_jobs_table_without_unique_contracts(workspace) -> None:
 
     with pytest.raises(DatabaseError):
         JobStore.open(paths.database, raw_marker)
+
+
+def test_reopen_rejects_hard_linked_database(workspace, tmp_path: Path) -> None:
+    paths, _ = workspace
+    raw_marker = paths.marker.read_text(encoding="utf-8")
+    store = JobStore.open(paths.database, raw_marker)
+    store.close()
+    outside = tmp_path / "outside.sqlite"
+    paths.database.replace(outside)
+    os.link(outside, paths.database)
+
+    with pytest.raises(DatabaseError):
+        JobStore.open(paths.database, raw_marker)
+
+
+def test_reopen_rejects_partial_unique_indexes(workspace) -> None:
+    paths, _ = workspace
+    raw_marker = paths.marker.read_text(encoding="utf-8")
+    store = JobStore.open(paths.database, raw_marker)
+    store.close()
+    with sqlite3.connect(paths.database) as connection:
+        connection.execute("PRAGMA foreign_keys = OFF")
+        connection.execute("DROP TABLE jobs")
+        connection.execute(
+            "CREATE TABLE jobs ("
+            "job_id TEXT PRIMARY KEY, canonical_url TEXT NOT NULL, "
+            "fingerprint TEXT NOT NULL, payload TEXT NOT NULL)"
+        )
+        connection.execute("CREATE UNIQUE INDEX jobs_url_partial ON jobs(canonical_url) WHERE 0")
+        connection.execute(
+            "CREATE UNIQUE INDEX jobs_fingerprint_partial ON jobs(fingerprint) WHERE 0"
+        )
+
+    with pytest.raises(DatabaseError):
+        JobStore.open(paths.database, raw_marker)
+
+
+def test_reopen_rejects_source_registry_without_primary_key(workspace) -> None:
+    paths, _ = workspace
+    raw_marker = paths.marker.read_text(encoding="utf-8")
+    store = JobStore.open(paths.database, raw_marker)
+    store.close()
+    with sqlite3.connect(paths.database) as connection:
+        connection.execute("DROP TABLE source_registry")
+        connection.execute("CREATE TABLE source_registry (source_id TEXT, payload TEXT)")
+
+    with pytest.raises(DatabaseError):
+        JobStore.open(paths.database, raw_marker)
+
+
+def test_sidecar_fchmod_failure_does_not_leak_descriptor(
+    workspace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import hermes_job_scout.database as database_module
+
+    paths, _ = workspace
+    before = len(os.listdir("/dev/fd"))
+    real_fchmod = database_module.os.fchmod
+    calls = 0
+
+    def fail_first_sidecar(descriptor: int, mode: int) -> None:
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise OSError("injected sidecar chmod failure")
+        real_fchmod(descriptor, mode)
+
+    monkeypatch.setattr(database_module.os, "fchmod", fail_first_sidecar)
+    with pytest.raises(DatabaseError):
+        JobStore.open(paths.database, paths.marker.read_text(encoding="utf-8"))
+    assert len(os.listdir("/dev/fd")) == before
