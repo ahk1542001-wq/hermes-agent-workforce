@@ -1,0 +1,12 @@
+{
+  "job_id": "req-123",
+  "stable_url": "https://careers.example.com/jobs/123?utm_source=synthetic&trk=feed&ref=board",
+  "source_type": "official",
+  "company": "Example Automation Labs",
+  "role": "AI Automation Engineer",
+  "work_type": "full_time",
+  "location": "Remote (Worldwide)",
+  "remote_region": "Global",
+  "experience": "0-3 years",
+  "description": "Build reliable workflows with n8n and Python."
+}

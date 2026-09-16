@@ -1,0 +1,12 @@
+{
+  "job_id": "req-stale",
+  "stable_url": "https://careers.example.com/jobs/stale",
+  "source_type": "official",
+  "company": "Example Automation Labs",
+  "role": "AI Automation Engineer",
+  "work_type": "full_time",
+  "location": "Remote (Worldwide)",
+  "remote_region": "Global",
+  "experience": "0-3 years",
+  "description": "This synthetic listing is retained only to test freshness handling."
+}
