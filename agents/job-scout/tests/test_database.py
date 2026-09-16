@@ -1,4 +1,5 @@
 import json
+import os
 import sqlite3
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -199,3 +200,126 @@ def test_transaction_can_group_job_and_event_once(workspace) -> None:
     assert store.current_revision() == 1
     assert len(store.list_events("job-1")) == 2
     store.close()
+
+
+def test_open_rejects_database_symlink_without_touching_target(workspace, tmp_path: Path) -> None:
+    paths, _ = workspace
+    outside = tmp_path / "outside.sqlite"
+    sqlite3.connect(outside).close()
+    paths.database.symlink_to(outside)
+
+    with pytest.raises(DatabaseError):
+        JobStore.open(paths.database, paths.marker.read_text(encoding="utf-8"))
+
+    with sqlite3.connect(outside) as connection:
+        assert (
+            connection.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall() == []
+        )
+
+
+def test_database_and_live_sidecars_are_private(workspace) -> None:
+    paths, _ = workspace
+    store = JobStore.open(paths.database, paths.marker.read_text(encoding="utf-8"))
+    store.upsert_job(_job(), expected_revision=0)
+
+    for path in (paths.database, Path(f"{paths.database}-wal"), Path(f"{paths.database}-shm")):
+        assert path.exists()
+        assert path.stat().st_mode & 0o777 == 0o600
+    store.close()
+
+
+def test_open_rejects_sidecar_symlink_before_sqlite_can_touch_target(
+    workspace, tmp_path: Path
+) -> None:
+    paths, _ = workspace
+    outside = tmp_path / "outside-wal"
+    outside.write_bytes(b"do-not-touch")
+    Path(f"{paths.database}-wal").symlink_to(outside)
+
+    with pytest.raises(DatabaseError):
+        JobStore.open(paths.database, paths.marker.read_text(encoding="utf-8"))
+
+    assert outside.read_bytes() == b"do-not-touch"
+
+
+def test_existing_partial_schema_fails_closed_without_repair(workspace) -> None:
+    paths, _ = workspace
+    with sqlite3.connect(paths.database) as connection:
+        connection.execute("CREATE TABLE schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+        connection.execute("INSERT INTO schema_meta(key, value) VALUES ('schema_version', '1')")
+    os.chmod(paths.database, 0o600)
+
+    with pytest.raises(DatabaseError):
+        JobStore.open(paths.database, paths.marker.read_text(encoding="utf-8"))
+
+    with sqlite3.connect(paths.database) as connection:
+        assert connection.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
+        ).fetchall() == [("schema_meta",)]
+
+
+def test_reopen_rejects_missing_audit_table_without_recreating_it(workspace) -> None:
+    paths, _ = workspace
+    raw_marker = paths.marker.read_text(encoding="utf-8")
+    store = JobStore.open(paths.database, raw_marker)
+    store.close()
+    with sqlite3.connect(paths.database) as connection:
+        connection.execute("DROP TABLE application_events")
+
+    with pytest.raises(DatabaseError):
+        JobStore.open(paths.database, raw_marker)
+
+    with sqlite3.connect(paths.database) as connection:
+        assert (
+            connection.execute(
+                "SELECT name FROM sqlite_master WHERE name='application_events'"
+            ).fetchone()
+            is None
+        )
+
+
+def test_application_events_reject_update_and_delete(workspace) -> None:
+    paths, _ = workspace
+    store = JobStore.open(paths.database, paths.marker.read_text(encoding="utf-8"))
+    store.upsert_job(_job(), expected_revision=0)
+
+    with pytest.raises(sqlite3.IntegrityError):
+        store._connection.execute("UPDATE application_events SET payload='{}'")
+    with pytest.raises(sqlite3.IntegrityError):
+        store._connection.execute("DELETE FROM application_events")
+    assert len(store.list_events("job-1")) == 1
+    store.close()
+
+
+def test_reopen_rejects_named_but_inert_audit_triggers(workspace) -> None:
+    paths, _ = workspace
+    raw_marker = paths.marker.read_text(encoding="utf-8")
+    store = JobStore.open(paths.database, raw_marker)
+    store.close()
+    with sqlite3.connect(paths.database) as connection:
+        connection.execute("DROP TRIGGER application_events_no_update")
+        connection.execute(
+            "CREATE TRIGGER application_events_no_update "
+            "BEFORE UPDATE ON application_events BEGIN SELECT 1; END"
+        )
+
+    with pytest.raises(DatabaseError):
+        JobStore.open(paths.database, raw_marker)
+
+
+def test_reopen_rejects_jobs_table_without_unique_contracts(workspace) -> None:
+    paths, _ = workspace
+    raw_marker = paths.marker.read_text(encoding="utf-8")
+    store = JobStore.open(paths.database, raw_marker)
+    store.close()
+    with sqlite3.connect(paths.database) as connection:
+        connection.execute("PRAGMA foreign_keys = OFF")
+        connection.execute("DROP TABLE jobs")
+        connection.execute(
+            "CREATE TABLE jobs ("
+            "job_id TEXT PRIMARY KEY, canonical_url TEXT NOT NULL, "
+            "fingerprint TEXT NOT NULL, payload TEXT NOT NULL)"
+        )
+
+    with pytest.raises(DatabaseError):
+        JobStore.open(paths.database, raw_marker)

@@ -8,10 +8,12 @@ updated or deleted.  Network/provider adapters belong in later tasks.
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
+import stat
 from contextlib import contextmanager
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, Iterator, TypeVar, cast
 from uuid import uuid4
 
@@ -25,7 +27,13 @@ from .models import (
     SourceRecord,
     WorkspaceMarker,
 )
-from .workspace import WorkspaceSafetyError, read_private_bytes, workspace_lock
+from .workspace import (
+    WorkspaceSafetyError,
+    _open_relative_directory_fd,
+    _open_workspace_root,
+    read_private_bytes,
+    workspace_lock,
+)
 
 
 class DatabaseError(RuntimeError):
@@ -41,6 +49,61 @@ class MarkerMismatch(DatabaseError):
 
 
 ModelT = TypeVar("ModelT")
+
+_PRIVATE_MODE = 0o600
+_EXPECTED_COLUMNS = {
+    "schema_meta": ("key", "value"),
+    "workspace_state": ("workspace_id", "revision"),
+    "jobs": ("job_id", "canonical_url", "fingerprint", "payload"),
+    "application_events": ("sequence", "event_id", "job_id", "payload"),
+    "approvals": ("approval_id", "job_id", "payload"),
+    "source_registry": ("source_id", "payload"),
+    "discovery_runs": ("run_id", "payload"),
+    "run_metrics": (
+        "run_id",
+        "provider",
+        "coverage",
+        "changed_count",
+        "checked_source_count",
+        "failed_source_count",
+        "result_count",
+        "tokens_used",
+        "tool_calls",
+        "query_count",
+        "pages_checked",
+        "cache_hits",
+        "free_credits_remaining",
+        "model_calls",
+        "actual_search_retrieval_spend_usd",
+    ),
+}
+_EXPECTED_TRIGGERS = {
+    "application_events_no_update",
+    "application_events_no_delete",
+}
+_EXPECTED_TRIGGER_SQL = {
+    "application_events_no_update": (
+        "CREATE TRIGGER application_events_no_update BEFORE UPDATE ON application_events "
+        "BEGIN SELECT RAISE(ABORT, 'application events are append-only'); END"
+    ),
+    "application_events_no_delete": (
+        "CREATE TRIGGER application_events_no_delete BEFORE DELETE ON application_events "
+        "BEGIN SELECT RAISE(ABORT, 'application events are append-only'); END"
+    ),
+}
+_REQUIRED_UNIQUE_COLUMNS = {
+    "jobs": {("canonical_url",), ("fingerprint",)},
+    "application_events": {("event_id",)},
+}
+_EXPECTED_FOREIGN_KEYS = {
+    "application_events": {("job_id", "jobs", "job_id")},
+    "approvals": {("job_id", "jobs", "job_id")},
+    "run_metrics": {("run_id", "discovery_runs", "run_id")},
+}
+
+
+def _normalize_sql(value: str) -> str:
+    return " ".join(value.strip().rstrip(";").lower().split())
 
 
 def _canonical_json(model: object) -> str:
@@ -88,10 +151,25 @@ class JobStore:
 
     SCHEMA_VERSION = 1
 
-    def __init__(self, database: Path, marker: WorkspaceMarker, paths: WorkspacePaths) -> None:
+    def __init__(
+        self,
+        database: Path,
+        marker: WorkspaceMarker,
+        paths: WorkspacePaths,
+        *,
+        created: bool,
+        root_fd: int,
+        data_fd: int,
+        database_fd: int,
+        sidecar_fds: dict[str, int],
+    ) -> None:
         self.path = database
         self.marker = marker
         self.paths = paths
+        self._root_fd = root_fd
+        self._data_fd = data_fd
+        self._database_fd = database_fd
+        self._sidecar_fds = sidecar_fds
         try:
             self._connection = sqlite3.connect(
                 str(database), timeout=2.5, isolation_level=None, check_same_thread=True
@@ -99,10 +177,16 @@ class JobStore:
             self._connection.row_factory = sqlite3.Row
             self._connection.execute("PRAGMA foreign_keys = ON")
             self._connection.execute("PRAGMA busy_timeout = 2500")
+            self._validate_main_file_identity()
+            if not created:
+                self._validate_existing_schema()
             journal_mode = self._connection.execute("PRAGMA journal_mode = WAL").fetchone()[0]
             if str(journal_mode).lower() != "wal":
                 raise DatabaseError("SQLite WAL mode could not be enabled")
-            self._initialize_schema()
+            if created:
+                self._initialize_schema()
+            self._validate_existing_schema()
+            self._secure_and_hold_storage_files()
         except DatabaseError:
             self.close()
             raise
@@ -132,20 +216,189 @@ class JobStore:
             raise MarkerMismatch("workspace marker does not match the supplied marker")
         try:
             with workspace_lock(paths, expected_workspace_id=supplied.workspace_id):
-                return cls(database, supplied, paths)
-        except (WorkspaceSafetyError, sqlite3.Error) as exc:
+                opened_root_fd, opened_marker = _open_workspace_root(
+                    paths.root, expected_workspace_id=supplied.workspace_id
+                )
+                root_fd: int | None = opened_root_fd
+                data_fd: int | None = None
+                database_fd: int | None = None
+                sidecar_fds: dict[str, int] = {}
+                try:
+                    if opened_marker != supplied:
+                        raise MarkerMismatch("workspace identity changed before database open")
+                    data_fd = _open_relative_directory_fd(opened_root_fd, PurePosixPath("data"))
+                    flags = os.O_RDWR | getattr(os, "O_NOFOLLOW", 0)
+                    created = False
+                    try:
+                        database_fd = os.open(paths.database.name, flags, dir_fd=data_fd)
+                    except FileNotFoundError:
+                        database_fd = os.open(
+                            paths.database.name,
+                            flags | os.O_CREAT | os.O_EXCL,
+                            _PRIVATE_MODE,
+                            dir_fd=data_fd,
+                        )
+                        created = True
+                    info = os.fstat(database_fd)
+                    if not stat.S_ISREG(info.st_mode):
+                        raise DatabaseError("database must be a regular file")
+                    os.fchmod(database_fd, _PRIVATE_MODE)
+                    for name in (
+                        f"{paths.database.name}-wal",
+                        f"{paths.database.name}-shm",
+                    ):
+                        try:
+                            descriptor = os.open(name, flags, dir_fd=data_fd)
+                        except FileNotFoundError:
+                            descriptor = os.open(
+                                name,
+                                flags | os.O_CREAT | os.O_EXCL,
+                                _PRIVATE_MODE,
+                                dir_fd=data_fd,
+                            )
+                        sidecar_info = os.fstat(descriptor)
+                        if not stat.S_ISREG(sidecar_info.st_mode):
+                            os.close(descriptor)
+                            raise DatabaseError(f"SQLite sidecar is not a regular file: {name}")
+                        os.fchmod(descriptor, _PRIVATE_MODE)
+                        sidecar_fds[name] = descriptor
+                    owned_root_fd = opened_root_fd
+                    owned_data_fd = data_fd
+                    owned_database_fd = database_fd
+                    owned_sidecar_fds = sidecar_fds
+                    root_fd = None
+                    data_fd = None
+                    database_fd = None
+                    sidecar_fds = {}
+                    return cls(
+                        database,
+                        supplied,
+                        paths,
+                        created=created,
+                        root_fd=owned_root_fd,
+                        data_fd=owned_data_fd,
+                        database_fd=owned_database_fd,
+                        sidecar_fds=owned_sidecar_fds,
+                    )
+                except Exception:
+                    for descriptor in sidecar_fds.values():
+                        os.close(descriptor)
+                    if database_fd is not None:
+                        os.close(database_fd)
+                    if data_fd is not None:
+                        os.close(data_fd)
+                    if root_fd is not None:
+                        os.close(root_fd)
+                    raise
+        except (WorkspaceSafetyError, sqlite3.Error, OSError) as exc:
             raise DatabaseError("private workspace lock or database is invalid") from exc
 
     def close(self) -> None:
         connection = getattr(self, "_connection", None)
         if connection is not None:
             self._connection.close()
+        for descriptor in getattr(self, "_sidecar_fds", {}).values():
+            os.close(descriptor)
+        if hasattr(self, "_sidecar_fds"):
+            self._sidecar_fds.clear()
+        for name in ("_database_fd", "_data_fd", "_root_fd"):
+            descriptor = getattr(self, name, None)
+            if descriptor is not None:
+                os.close(descriptor)
+                setattr(self, name, None)
 
     def __enter__(self) -> JobStore:
         return self
 
     def __exit__(self, exc_type: object, exc: object, traceback: object) -> None:
         self.close()
+
+    def _validate_fd_entry(self, descriptor: int, name: str) -> None:
+        held = os.fstat(descriptor)
+        try:
+            current = os.stat(name, dir_fd=self._data_fd, follow_symlinks=False)
+        except OSError as exc:
+            raise DatabaseError(f"private database file is unavailable: {name}") from exc
+        if (
+            not stat.S_ISREG(current.st_mode)
+            or (held.st_dev, held.st_ino) != (current.st_dev, current.st_ino)
+            or stat.S_IMODE(current.st_mode) != _PRIVATE_MODE
+        ):
+            raise DatabaseError(f"private database identity or mode changed: {name}")
+
+    def _validate_main_file_identity(self) -> None:
+        self._validate_fd_entry(self._database_fd, self.path.name)
+
+    def _secure_and_hold_storage_files(self) -> None:
+        self._validate_main_file_identity()
+        expected = {f"{self.path.name}-wal", f"{self.path.name}-shm"}
+        if set(self._sidecar_fds) != expected:
+            raise DatabaseError("SQLite sidecar identity set is incomplete")
+        for name, descriptor in self._sidecar_fds.items():
+            self._validate_fd_entry(descriptor, name)
+
+    def _validate_storage_identity(self) -> None:
+        self._validate_main_file_identity()
+        for name, descriptor in self._sidecar_fds.items():
+            self._validate_fd_entry(descriptor, name)
+
+    def _validate_existing_schema(self) -> None:
+        rows = self._connection.execute(
+            "SELECT name, type FROM sqlite_master "
+            "WHERE type IN ('table', 'trigger') AND name NOT LIKE 'sqlite_%'"
+        ).fetchall()
+        actual_tables = {row[0] for row in rows if row[1] == "table"}
+        actual_triggers = {row[0] for row in rows if row[1] == "trigger"}
+        if actual_tables != set(_EXPECTED_COLUMNS) or actual_triggers != _EXPECTED_TRIGGERS:
+            raise DatabaseError("database schema is incomplete or unexpected")
+        for table, expected_columns in _EXPECTED_COLUMNS.items():
+            columns = tuple(
+                row[1] for row in self._connection.execute(f'PRAGMA table_info("{table}")')
+            )
+            if columns != expected_columns:
+                raise DatabaseError(f"database table shape is invalid: {table}")
+        trigger_sql = {
+            row[0]: row[1]
+            for row in self._connection.execute(
+                "SELECT name, sql FROM sqlite_master WHERE type='trigger'"
+            )
+        }
+        for name, expected_sql in _EXPECTED_TRIGGER_SQL.items():
+            actual_sql = trigger_sql.get(name)
+            if actual_sql is None or _normalize_sql(actual_sql) != _normalize_sql(expected_sql):
+                raise DatabaseError(f"database trigger contract is invalid: {name}")
+        for table, required_sets in _REQUIRED_UNIQUE_COLUMNS.items():
+            actual_sets: set[tuple[str, ...]] = set()
+            for index in self._connection.execute(f'PRAGMA index_list("{table}")'):
+                if index[2] != 1:
+                    continue
+                actual_sets.add(
+                    tuple(
+                        column[2]
+                        for column in self._connection.execute(f'PRAGMA index_info("{index[1]}")')
+                    )
+                )
+            if not required_sets.issubset(actual_sets):
+                raise DatabaseError(f"database uniqueness contract is invalid: {table}")
+        for table, expected_keys in _EXPECTED_FOREIGN_KEYS.items():
+            actual_keys = {
+                (row[3], row[2], row[4])
+                for row in self._connection.execute(f'PRAGMA foreign_key_list("{table}")')
+            }
+            if actual_keys != expected_keys:
+                raise DatabaseError(f"database foreign-key contract is invalid: {table}")
+        schema = self._connection.execute(
+            "SELECT value FROM schema_meta WHERE key = 'schema_version'"
+        ).fetchone()
+        if schema is None or schema[0] != str(self.SCHEMA_VERSION):
+            raise DatabaseError("unsupported Job Scout database schema version")
+        workspaces = self._connection.execute(
+            "SELECT workspace_id, revision FROM workspace_state"
+        ).fetchall()
+        if len(workspaces) != 1 or workspaces[0][0] != str(self.marker.workspace_id):
+            raise MarkerMismatch("database workspace identity does not match marker")
+        if not isinstance(workspaces[0][1], int) or workspaces[0][1] < 0:
+            raise DatabaseError("database revision is invalid")
 
     def _initialize_schema(self) -> None:
         connection = self._connection
@@ -202,6 +455,16 @@ class JobStore:
                     model_calls INTEGER NOT NULL,
                     actual_search_retrieval_spend_usd TEXT NOT NULL
                 );
+                CREATE TRIGGER application_events_no_update
+                BEFORE UPDATE ON application_events
+                BEGIN
+                    SELECT RAISE(ABORT, 'application events are append-only');
+                END;
+                CREATE TRIGGER application_events_no_delete
+                BEFORE DELETE ON application_events
+                BEGIN
+                    SELECT RAISE(ABORT, 'application events are append-only');
+                END;
                 """
             )
             connection.execute("BEGIN IMMEDIATE")
@@ -242,6 +505,7 @@ class JobStore:
     def current_revision(self) -> int:
         try:
             with workspace_lock(self.paths, expected_workspace_id=self.marker.workspace_id):
+                self._validate_storage_identity()
                 return self._current_revision_unlocked()
         except (WorkspaceSafetyError, sqlite3.Error) as exc:
             raise DatabaseError("cannot read the private store revision") from exc
@@ -253,6 +517,7 @@ class JobStore:
             raise RevisionConflict("expected revision must be an integer")
         try:
             with workspace_lock(self.paths, expected_workspace_id=self.marker.workspace_id):
+                self._validate_storage_identity()
                 self._connection.execute("BEGIN IMMEDIATE")
                 try:
                     actual = self._current_revision_unlocked()
@@ -336,6 +601,7 @@ class JobStore:
         return self.current_revision()
 
     def get_job(self, job_id: str) -> JobRecord | None:
+        self._validate_storage_identity()
         row = self._connection.execute(
             "SELECT payload FROM jobs WHERE job_id = ?", (job_id,)
         ).fetchone()
@@ -347,6 +613,7 @@ class JobStore:
             raise DatabaseError("stored job payload is invalid") from exc
 
     def list_events(self, job_id: str) -> list[ApplicationEvent]:
+        self._validate_storage_identity()
         rows = self._connection.execute(
             "SELECT payload FROM application_events WHERE job_id = ? ORDER BY sequence", (job_id,)
         ).fetchall()
@@ -375,6 +642,7 @@ class JobStore:
         return self.current_revision()
 
     def get_source(self, source_id: str) -> SourceRecord | None:
+        self._validate_storage_identity()
         row = self._connection.execute(
             "SELECT payload FROM source_registry WHERE source_id = ?", (source_id,)
         ).fetchone()
@@ -452,6 +720,7 @@ class JobStore:
         return self.current_revision()
 
     def get_discovery_run(self, run_id: str) -> DiscoveryRun | None:
+        self._validate_storage_identity()
         row = self._connection.execute(
             "SELECT payload FROM discovery_runs WHERE run_id = ?", (run_id,)
         ).fetchone()
