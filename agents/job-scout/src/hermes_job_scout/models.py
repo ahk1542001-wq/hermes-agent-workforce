@@ -65,6 +65,7 @@ class SourceAuthority(StrEnum):
     API = "api"
     AGGREGATOR = "aggregator"
     DISCOVERY_HINT = "discovery_hint"
+    NEEDS_VERIFICATION = "needs_verification"
     USER_PROVIDED = "user_provided"
 
 

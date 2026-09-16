@@ -108,5 +108,4 @@ def test_authority_rules_are_conservative() -> None:
         is SourceAuthority.ATS
     )
     unknown = classify_source_authority("https://careers.unknown.test/jobs/1")
-    expected = getattr(SourceAuthority, "NEEDS_VERIFICATION", SourceAuthority.DISCOVERY_HINT)
-    assert unknown is expected
+    assert unknown is SourceAuthority.NEEDS_VERIFICATION

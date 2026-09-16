@@ -164,4 +164,4 @@ def classify_source_authority(url: str) -> SourceAuthority:
         return SourceAuthority.ATS
     if any(_host_matches(host, domain) for domain in _VERIFIED_EMPLOYER_DOMAINS):
         return SourceAuthority.OFFICIAL
-    return getattr(SourceAuthority, "NEEDS_VERIFICATION", SourceAuthority.DISCOVERY_HINT)
+    return SourceAuthority.NEEDS_VERIFICATION
