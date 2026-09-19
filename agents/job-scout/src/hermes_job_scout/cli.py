@@ -20,7 +20,12 @@ from .documents import (
     render_resume_pdf,
     render_synthetic_resume,
 )
-from .evidence import load_evidence_pack, require_approved_evidence
+from .evidence import (
+    EvidenceApprovalError,
+    EvidencePackError,
+    load_evidence_pack,
+    require_approved_evidence,
+)
 from .models import CandidateFact, CandidateProfile, JobState, SearchPolicy, WorkType
 from .normalize import deduplicate, normalize_job
 from .policy import evaluate_hard_filters
@@ -220,8 +225,11 @@ def render_synthetic(output: Path = typer.Option(...)) -> None:
 
 @app.command("validate-evidence")
 def validate_evidence(pack: Path = typer.Option(...), approval: Path = typer.Option(...)) -> None:
-    evidence = load_evidence_pack(pack)
-    approved = require_approved_evidence(evidence, approval)
+    try:
+        evidence = load_evidence_pack(pack)
+        approved = require_approved_evidence(evidence, approval)
+    except (EvidencePackError, EvidenceApprovalError) as exc:
+        raise typer.BadParameter("evidence pack or approval failed validation") from exc
     typer.echo(f"approved facts={len(approved.profile.facts)} sha256={approved.sha256}")
 
 
@@ -238,7 +246,10 @@ def build_master_resume(
     approval: Path = typer.Option(...),
     output: Path = typer.Option(...),
 ) -> None:
-    evidence = require_approved_evidence(load_evidence_pack(pack), approval)
+    try:
+        evidence = require_approved_evidence(load_evidence_pack(pack), approval)
+    except (EvidencePackError, EvidenceApprovalError) as exc:
+        raise typer.BadParameter("evidence pack or approval failed validation") from exc
     profile = evidence.profile
     facts = {fact.fact_id: fact for fact in profile.facts}
     draft = ApplicationPackDraft(

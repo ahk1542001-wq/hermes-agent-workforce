@@ -170,3 +170,21 @@ def test_render_synthetic_cli_creates_no_real_data(tmp_path: Path) -> None:
     assert (output / "resume.docx").exists()
     assert (output / "resume.pdf").exists()
     assert "Synthetic" in (output / "resume.txt").read_text(encoding="utf-8")
+
+
+def test_evidence_cli_failure_redacts_internal_paths(tmp_path: Path) -> None:
+    private_like = tmp_path / "Private" / "Career" / "missing-pack.md"
+    result = RUNNER.invoke(
+        app,
+        [
+            "validate-evidence",
+            "--pack",
+            str(private_like),
+            "--approval",
+            str(tmp_path / "approval.json"),
+        ],
+    )
+    assert result.exit_code != 0
+    assert "failed validation" in result.output
+    assert str(tmp_path) not in result.output
+    assert "Traceback" not in result.output
