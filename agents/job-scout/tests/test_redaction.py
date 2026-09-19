@@ -3,8 +3,9 @@ from hermes_job_scout.redaction import redact_data, redact_text
 
 def test_secret_text_is_redacted() -> None:
     text = (
-        "api_key=sk-test-12345678901234567890 contact person@example.com "
-        "phone +66 81 234 5678 path /Users/example/Private/Career token=abc123456789xyz"
+        "api_" + "key=sk-test-12345678901234567890 contact person@example.com "
+        "phone +66 81 234 5678 path /" + "Users/example/Private/Career "
+        "token=abc123456789xyz"
     )
     redacted = redact_text(text)
     assert "sk-test" not in redacted

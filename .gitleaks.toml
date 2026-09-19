@@ -1,0 +1,8 @@
+title = "Hermes Agent Workforce public-boundary scan"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Synthetic example domains only"
+regexes = ['''https://(?:careers\.)?example\.com/''']
