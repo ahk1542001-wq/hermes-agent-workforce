@@ -8,5 +8,7 @@
   "location": "Remote (Worldwide)",
   "remote_region": "Global",
   "experience": "0-3 years",
+  "first_seen_at": "2026-07-01T08:00:00+00:00",
+  "last_verified_at": "2026-07-01T08:00:00+00:00",
   "description": "This synthetic listing is retained only to test freshness handling."
 }

@@ -17,6 +17,9 @@ dependencies = [
     "reportlab>=4.4,<5",
 ]
 
+[project.scripts]
+job-scout = "hermes_job_scout.cli:app"
+
 [dependency-groups]
 dev = [
     "pytest>=8.3,<9",
