@@ -162,3 +162,45 @@ def test_authority_rules_are_conservative() -> None:
     assert unknown is SourceAuthority.NEEDS_VERIFICATION
     with pytest.raises(SourceEnvelopeError):
         classify_source_authority("not-a-url")
+
+
+def test_structured_feed_hosts_classify_as_discovery_hint() -> None:
+    assert (
+        classify_source_authority("https://himalayas.app/jobs/software-engineer")
+        is SourceAuthority.DISCOVERY_HINT
+    )
+    assert (
+        classify_source_authority("https://remotive.com/remote-jobs/software-dev/role-123")
+        is SourceAuthority.DISCOVERY_HINT
+    )
+    assert (
+        classify_source_authority("https://remoteok.com/remote-jobs/123456")
+        is SourceAuthority.DISCOVERY_HINT
+    )
+    assert (
+        classify_source_authority("https://weworkremotely.com/remote-jobs/company-role")
+        is SourceAuthority.DISCOVERY_HINT
+    )
+
+
+def test_source_catalog_contains_approved_ladder() -> None:
+    from hermes_job_scout.sources import SOURCE_CATALOG, get_source_catalog_entry
+
+    assert "himalayas" in SOURCE_CATALOG
+    assert "remoteok" in SOURCE_CATALOG
+    assert "remotive" in SOURCE_CATALOG
+    assert "weworkremotely" in SOURCE_CATALOG
+
+    himalayas = get_source_catalog_entry("himalayas")
+    assert himalayas.initial_authority is SourceAuthority.DISCOVERY_HINT
+    assert himalayas.is_delayed is False
+
+    remotive = get_source_catalog_entry("remotive")
+    assert remotive.is_delayed is True
+    assert remotive.delay_hours == 24
+    assert remotive.initial_authority is SourceAuthority.DISCOVERY_HINT
+
+    wwr = get_source_catalog_entry("weworkremotely")
+    assert wwr.preflight_required is True
+    assert wwr.initial_authority is SourceAuthority.DISCOVERY_HINT
+

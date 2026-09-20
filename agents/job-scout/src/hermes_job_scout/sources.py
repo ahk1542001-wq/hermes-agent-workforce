@@ -6,6 +6,7 @@ import hashlib
 import re
 import unicodedata
 from collections.abc import Mapping
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 from urllib.parse import urlsplit
@@ -46,13 +47,85 @@ _DISCOVERY_HOSTS = {
     "indeed.com",
     "wellfound.com",
     "remoteok.com",
+    "remoteok.io",
     "weworkremotely.com",
     "jobstreet.com",
     "jobsdb.com",
     "jobthai.com",
     "ycombinator.com",
     "builtin.com",
+    "himalayas.app",
+    "remotive.com",
 }
+
+
+@dataclass(frozen=True, slots=True)
+class SourceCatalogEntry:
+    source_id: str
+    name: str
+    feed_type: str
+    base_url: str
+    initial_authority: SourceAuthority = SourceAuthority.DISCOVERY_HINT
+    attribution_required: bool = True
+    is_delayed: bool = False
+    delay_hours: int = 0
+    rate_limit_per_minute: int = 30
+    preflight_required: bool = False
+
+
+SOURCE_CATALOG: dict[str, SourceCatalogEntry] = {
+    "himalayas": SourceCatalogEntry(
+        source_id="himalayas",
+        name="Himalayas",
+        feed_type="json_api",
+        base_url="https://himalayas.app/jobs/api",
+        initial_authority=SourceAuthority.DISCOVERY_HINT,
+        attribution_required=True,
+        is_delayed=False,
+        delay_hours=0,
+        rate_limit_per_minute=20,
+    ),
+    "remoteok": SourceCatalogEntry(
+        source_id="remoteok",
+        name="Remote OK",
+        feed_type="json_or_rss",
+        base_url="https://remoteok.com/api",
+        initial_authority=SourceAuthority.DISCOVERY_HINT,
+        attribution_required=True,
+        is_delayed=False,
+        delay_hours=0,
+        rate_limit_per_minute=10,
+    ),
+    "remotive": SourceCatalogEntry(
+        source_id="remotive",
+        name="Remotive",
+        feed_type="delayed_api_or_rss",
+        base_url="https://remotive.com/api/remote-jobs",
+        initial_authority=SourceAuthority.DISCOVERY_HINT,
+        attribution_required=True,
+        is_delayed=True,
+        delay_hours=24,
+        rate_limit_per_minute=20,
+    ),
+    "weworkremotely": SourceCatalogEntry(
+        source_id="weworkremotely",
+        name="We Work Remotely",
+        feed_type="conditional_rss",
+        base_url="https://weworkremotely.com/categories/remote-programming-jobs.rss",
+        initial_authority=SourceAuthority.DISCOVERY_HINT,
+        attribution_required=True,
+        is_delayed=False,
+        delay_hours=0,
+        rate_limit_per_minute=10,
+        preflight_required=True,
+    ),
+}
+
+
+def get_source_catalog_entry(source_id: str) -> SourceCatalogEntry:
+    if source_id not in SOURCE_CATALOG:
+        raise KeyError(f"Unknown source ID in catalog: {source_id}")
+    return SOURCE_CATALOG[source_id]
 
 
 def _clean_text(value: str) -> str:
