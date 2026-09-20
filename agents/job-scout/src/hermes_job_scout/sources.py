@@ -12,9 +12,17 @@ from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import urlsplit
 
-from pydantic import HttpUrl, ValidationError
+from pydantic import AnyHttpUrl, HttpUrl, ValidationError
 
-from .models import DiscoveryHint, ExtractedSource, RawFeedItem, SourceAuthority
+from .models import (
+    DiscoveryHint,
+    EvidenceRef,
+    ExtractedSource,
+    JobRecord,
+    JobState,
+    RawFeedItem,
+    SourceAuthority,
+)
 from .normalize import canonicalize_url
 
 
@@ -657,3 +665,107 @@ def parse_weworkremotely_rss(
     if not items:
         raise SourceEnvelopeError("We Work Remotely RSS contains no items")
     return items
+
+
+_GENERIC_COMPANY_SUFFIXES = {
+    "corp",
+    "corporation",
+    "inc",
+    "incorporated",
+    "llc",
+    "ltd",
+    "limited",
+    "co",
+    "company",
+    "group",
+    "holdings",
+    "gmbh",
+    "technologies",
+    "technology",
+    "tech",
+    "software",
+    "ai",
+    "labs",
+    "io",
+}
+
+
+def _matches_company(candidate_url: str, company: str) -> bool:
+    tokens = [t for t in re.split(r"[^a-z0-9]+", company.lower()) if t]
+    significant = [t for t in tokens if t not in _GENERIC_COMPANY_SUFFIXES]
+    check_tokens = significant if significant else tokens
+    if not check_tokens:
+        return True
+    parts = urlsplit(candidate_url.lower())
+    host = parts.hostname or ""
+    path = parts.path
+    return any(tok in host or tok in path for tok in check_tokens)
+
+
+def verify_feed_listing(
+    hint_record: JobRecord,
+    official_source: ExtractedSource | None = None,
+    official_url: str | None = None,
+    verified_at: datetime | None = None,
+) -> JobRecord:
+    """Verify a discovery hint against official employer or recognized ATS evidence.
+
+    If candidate official/ATS URL matches company and recognized authority rules,
+    returns an updated JobRecord promoted to ATS or OFFICIAL authority with
+    state=JobState.VERIFIED. Otherwise returns the hint_record unmodified.
+    """
+    if not isinstance(hint_record, JobRecord):
+        raise ValueError("hint_record must be a JobRecord")
+
+    candidate_url: str | None = None
+    retrieved_time: datetime | None = None
+
+    if official_source is not None:
+        candidate_url = str(official_source.url)
+        retrieved_time = official_source.retrieved_at
+    elif official_url is not None:
+        candidate_url = official_url
+        retrieved_time = verified_at or hint_record.last_verified_at
+    else:
+        for ref in hint_record.evidence_refs:
+            if ref.field == "apply_url" and ref.source_url:
+                candidate_url = str(ref.source_url)
+                retrieved_time = ref.retrieved_at or hint_record.last_verified_at
+                break
+
+    if not candidate_url:
+        return hint_record
+
+    try:
+        canonical_cand = canonicalize_url(candidate_url)
+        authority = classify_source_authority(canonical_cand)
+    except Exception:
+        return hint_record
+
+    if authority not in (SourceAuthority.ATS, SourceAuthority.OFFICIAL):
+        return hint_record
+
+    if not _matches_company(canonical_cand, hint_record.company):
+        return hint_record
+
+    new_verified_at = retrieved_time or hint_record.last_verified_at
+    new_evidence_refs = list(hint_record.evidence_refs)
+    new_evidence_refs.append(
+        EvidenceRef(
+            field="official_source",
+            source_url=AnyHttpUrl(canonical_cand),
+            retrieved_at=new_verified_at,
+        )
+    )
+
+    return JobRecord.model_validate(
+        {
+            **hint_record.model_dump(mode="python"),
+            "stable_url": HttpUrl(canonical_cand),
+            "source_type": authority.value,
+            "authority": authority,
+            "state": JobState.VERIFIED,
+            "last_verified_at": max(hint_record.last_verified_at, new_verified_at),
+            "evidence_refs": new_evidence_refs,
+        }
+    )
