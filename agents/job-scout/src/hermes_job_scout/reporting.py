@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from typing import cast
 
+from .models import DiscoveryRun, SourceRecord
 from .redaction import redact_data, redact_text
 
 
@@ -101,4 +103,34 @@ def render_markdown(report: RunReport) -> str:
     return "\n".join(lines)
 
 
-__all__ = ["QualifiedJobView", "RunReport", "render_markdown"]
+def format_run_summary(run: DiscoveryRun, sources: Sequence[SourceRecord] = ()) -> str:
+    """Format an auditable summary of a discovery run and source health."""
+    failed_names = ", ".join(run.failed_source_ids) if run.failed_source_ids else "None"
+    lines = [
+        f"# Discovery Run Summary: {run.run_id}",
+        "",
+        f"- Provider: {run.provider}",
+        f"- Coverage: {run.coverage}",
+        f"- Checked sources ({len(run.checked_source_ids)}): {', '.join(run.checked_source_ids)}",
+        f"- Failed sources: {failed_names}",
+        f"- Results found: {run.result_count}",
+        f"- Changed count: {run.changed_count}",
+        f"- Model calls: {run.model_calls}",
+        f"- Search/retrieval spend USD: {run.actual_search_retrieval_spend_usd:.2f}",
+    ]
+    if sources:
+        lines.extend(["", "## Source Health Status", ""])
+        for src in sources:
+            err = f", error: {src.last_error_code}" if src.last_error_code else ""
+            succ = (
+                f", last success: {src.last_success_at.isoformat()}" if src.last_success_at else ""
+            )
+            lines.append(
+                f"- {src.source_id}: {src.status} "
+                f"(last checked: {src.last_checked_at.isoformat()}{succ}{err})"
+            )
+    lines.append("")
+    return "\n".join(lines)
+
+
+__all__ = ["QualifiedJobView", "RunReport", "format_run_summary", "render_markdown"]

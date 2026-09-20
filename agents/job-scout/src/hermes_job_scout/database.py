@@ -17,7 +17,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Iterator, TypeVar, cast
 from uuid import uuid4
 
-from pydantic import ValidationError
+from pydantic import HttpUrl, ValidationError
 
 from .config import WorkspacePaths
 from .models import (
@@ -211,6 +211,24 @@ class _Transaction:
 
     def upsert_source(self, source: SourceRecord) -> None:
         self.store._upsert_source(source, self)
+
+    def update_source_health(
+        self,
+        source_id: str,
+        checked_at: datetime,
+        success: bool,
+        *,
+        error_code: str | None = None,
+        changed: bool = False,
+    ) -> None:
+        self.store._update_source_health(
+            source_id=source_id,
+            checked_at=checked_at,
+            success=success,
+            error_code=error_code,
+            changed=changed,
+            transaction=self,
+        )
 
     def record_discovery_run(self, run: DiscoveryRun) -> None:
         self.store._record_discovery_run(run, self)
@@ -906,7 +924,102 @@ class JobStore:
         except ValidationError as exc:
             raise DatabaseError("stored source payload is invalid") from exc
 
+    def _update_source_health(
+        self,
+        source_id: str,
+        checked_at: datetime,
+        success: bool,
+        error_code: str | None,
+        changed: bool,
+        transaction: _Transaction,
+    ) -> None:
+        if checked_at.tzinfo is None or checked_at.utcoffset() is None:
+            raise ValueError("checked_at must include a timezone")
+        row = self._connection.execute(
+            "SELECT payload FROM source_registry WHERE source_id = ?", (source_id,)
+        ).fetchone()
+        existing = SourceRecord.model_validate_json(row[0]) if row is not None else None
+        if existing is None:
+            from .sources import get_source_catalog_entry
+
+            try:
+                entry = get_source_catalog_entry(source_id)
+                existing = SourceRecord(
+                    source_id=source_id,
+                    organization=entry.name,
+                    source_type=entry.feed_type,
+                    url=HttpUrl(entry.base_url),
+                    status="healthy" if success else "failing",
+                    last_checked_at=checked_at,
+                    last_success_at=checked_at if success else None,
+                    last_changed_at=checked_at if (success and changed) else None,
+                    last_error_code=None if success else (error_code or "FETCH_ERROR"),
+                )
+            except KeyError:
+                raise DatabaseError(f"source {source_id!r} not found in catalog or registry")
+        else:
+            updated_fields: dict[str, Any] = {
+                "last_checked_at": checked_at,
+                "status": "healthy" if success else "failing",
+                "last_error_code": None if success else (error_code or "FETCH_ERROR"),
+            }
+            if success:
+                updated_fields["last_success_at"] = checked_at
+                if changed:
+                    updated_fields["last_changed_at"] = checked_at
+            existing = existing.model_copy(update=updated_fields)
+
+        self._upsert_source(existing, transaction)
+
+    def update_source_health(
+        self,
+        source_id: str,
+        checked_at: datetime,
+        success: bool,
+        *,
+        error_code: str | None = None,
+        changed: bool = False,
+        expected_revision: int | None = None,
+    ) -> int:
+        revision = self.current_revision() if expected_revision is None else expected_revision
+        with self.transaction(revision) as transaction:
+            transaction.update_source_health(
+                source_id=source_id,
+                checked_at=checked_at,
+                success=success,
+                error_code=error_code,
+                changed=changed,
+            )
+        return self.current_revision()
+
     def _record_discovery_run(self, run: DiscoveryRun, transaction: _Transaction) -> None:
+        for source_id in run.checked_source_ids:
+            row = self._connection.execute(
+                "SELECT 1 FROM source_registry WHERE source_id = ?", (source_id,)
+            ).fetchone()
+            if row is None:
+                from .sources import get_source_catalog_entry
+
+                try:
+                    entry = get_source_catalog_entry(source_id)
+                    source_rec = SourceRecord(
+                        source_id=source_id,
+                        organization=entry.name,
+                        source_type=entry.feed_type,
+                        url=HttpUrl(entry.base_url),
+                        status="failing" if source_id in run.failed_source_ids else "healthy",
+                        last_checked_at=run.completed_at,
+                        last_success_at=None
+                        if source_id in run.failed_source_ids
+                        else run.completed_at,
+                        last_error_code="FETCH_ERROR"
+                        if source_id in run.failed_source_ids
+                        else None,
+                    )
+                    self._upsert_source(source_rec, transaction)
+                except KeyError:
+                    pass
+
         missing = [
             source_id
             for source_id in run.checked_source_ids
