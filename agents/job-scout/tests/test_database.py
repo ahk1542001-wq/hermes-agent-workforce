@@ -15,10 +15,12 @@ from hermes_job_scout.models import (
     DiscoveryRun,
     JobRecord,
     JobState,
+    RawFeedItem,
     SourceAuthority,
     SourceRecord,
     WorkType,
 )
+from hermes_job_scout.normalize import deduplicate, normalize_feed_item
 from hermes_job_scout.workspace import bootstrap_private_workspace
 
 NOW = datetime(2026, 9, 15, 8, 0, tzinfo=timezone(timedelta(hours=7)))
@@ -545,4 +547,105 @@ def test_persistent_root_restore_failure_still_restores_parent_and_is_typed(
     monkeypatch.undo()
     os.fchmod(store._root_fd, 0o700)
     assert store.current_revision() == 1
+    store.close()
+
+
+def test_multi_feed_discovery_persistence_atomic_transaction_and_events(
+    workspace,
+) -> None:
+    paths, _ = workspace
+    store = JobStore.open(paths.database, paths.marker.read_text(encoding="utf-8"))
+
+    item1 = RawFeedItem(
+        source_name="himalayas",
+        source_item_id="REQ-FEED-100",
+        title="Agentic Workflow Specialist",
+        company="Nexus Automation",
+        url="https://himalayas.app/jobs/nexus-automation/workflow-spec",
+        apply_url="https://jobs.lever.co/nexus/REQ-FEED-100",
+        description="Design scalable agent workflows.",
+        location="Worldwide",
+        published_at=NOW,
+        retrieved_at=NOW,
+    )
+    item2 = RawFeedItem(
+        source_name="remoteok",
+        source_item_id="REQ-FEED-100",
+        title="Agentic Workflow Specialist",
+        company="Nexus Automation",
+        url="https://remoteok.com/remote-jobs/REQ-FEED-100",
+        apply_url="https://jobs.lever.co/nexus/REQ-FEED-100",
+        description="Design scalable agent workflows.",
+        location="Worldwide",
+        published_at=NOW,
+        retrieved_at=NOW,
+    )
+
+    rec1 = normalize_feed_item(item1, NOW)
+    rec2 = normalize_feed_item(item2, NOW)
+    dedup_result = deduplicate([rec1, rec2])
+    assert len(dedup_result.records) == 1
+    retained = dedup_result.records[0]
+
+    run = DiscoveryRun(
+        run_id="run-feed-multi-001",
+        started_at=NOW,
+        completed_at=NOW + timedelta(minutes=1),
+        coverage="full",
+        checked_source_ids=["himalayas", "remoteok"],
+        failed_source_ids=[],
+        changed_count=1,
+        result_count=1,
+        provider="structured_feed_runner",
+        model_calls=0,
+        actual_search_retrieval_spend_usd=0.0,
+    )
+
+    with store.transaction(expected_revision=0) as tx:
+        tx.upsert_job(retained)
+        tx.update_source_health("himalayas", NOW, success=True, changed=True)
+        tx.update_source_health("remoteok", NOW, success=True, changed=True)
+        tx.record_discovery_run(run)
+
+    assert store.current_revision() == 1
+
+    persisted_job = store.get_job(retained.job_id)
+    assert persisted_job is not None
+    assert persisted_job.job_id == "REQ-FEED-100"
+    assert persisted_job.company == "Nexus Automation"
+
+    himalayas_src = store.get_source("himalayas")
+    remoteok_src = store.get_source("remoteok")
+    assert himalayas_src is not None and himalayas_src.status == "healthy"
+    assert remoteok_src is not None and remoteok_src.status == "healthy"
+
+    persisted_run = store.get_discovery_run("run-feed-multi-001")
+    assert persisted_run is not None
+    assert persisted_run.coverage == "full"
+
+    events = store.list_events(retained.job_id)
+    assert len(events) == 1
+    assert events[0].event_type == "job_upserted"
+    assert events[0].state is JobState.DISCOVERED
+
+    stale_item = RawFeedItem(
+        source_name="himalayas",
+        source_item_id="REQ-FEED-200",
+        title="Data Engineer",
+        company="Nexus Automation",
+        url="https://himalayas.app/jobs/nexus-automation/data-eng",
+        description="Data engineering",
+        location="Worldwide",
+        published_at=NOW,
+        retrieved_at=NOW,
+    )
+    stale_rec = normalize_feed_item(stale_item, NOW)
+
+    with pytest.raises(RevisionConflict):
+        with store.transaction(expected_revision=0) as tx:
+            tx.upsert_job(stale_rec)
+
+    assert store.current_revision() == 1
+    assert store.get_job("REQ-FEED-200") is None
+
     store.close()
