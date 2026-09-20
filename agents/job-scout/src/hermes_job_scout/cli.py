@@ -26,11 +26,29 @@ from .evidence import (
     load_evidence_pack,
     require_approved_evidence,
 )
-from .models import CandidateFact, CandidateProfile, JobState, SearchPolicy, WorkType
-from .normalize import deduplicate, normalize_job
+from .models import (
+    CandidateFact,
+    CandidateProfile,
+    JobRecord,
+    JobState,
+    RawFeedItem,
+    SearchPolicy,
+    SourceAuthority,
+    WorkType,
+)
+from .normalize import deduplicate, normalize_feed_item, normalize_job
 from .policy import evaluate_hard_filters
 from .reporting import QualifiedJobView, RunReport, render_markdown
 from .scoring import score_job
+from .sources import (
+    parse_himalayas_feed,
+    parse_remoteok_json,
+    parse_remoteok_rss,
+    parse_remotive_api,
+    parse_remotive_rss,
+    parse_weworkremotely_rss,
+    verify_feed_listing,
+)
 
 app = typer.Typer(no_args_is_help=True)
 _NOW = datetime(2026, 9, 15, 8, 0, tzinfo=timezone.utc)
@@ -213,6 +231,217 @@ def run_fixtures(
     summary = (
         f"qualified={len(qualified)} invalid={invalid_count} "
         f"duplicates={run_report.duplicate_count}"
+    )
+    typer.echo(summary)
+
+
+def _ingest_feed_file(
+    path: Path,
+    now: datetime,
+    wwr_approved: bool = False,
+) -> tuple[str, list[RawFeedItem]]:
+    name = path.name.casefold()
+    if name.endswith(".json"):
+        text = path.read_text(encoding="utf-8")
+        data = json.loads(text)
+        if "himalayas" in name or (isinstance(data, dict) and "data" in data):
+            if not isinstance(data, dict):
+                raise ValueError("himalayas payload must be a JSON object")
+            return "himalayas", parse_himalayas_feed(data, now)
+        if "remoteok" in name or isinstance(data, list):
+            if not isinstance(data, list):
+                raise ValueError("remoteok payload must be a JSON array")
+            return "remoteok", parse_remoteok_json(data, now)
+        if "remotive" in name or (isinstance(data, dict) and "jobs" in data):
+            if not isinstance(data, dict):
+                raise ValueError("remotive payload must be a JSON object")
+            return "remotive", parse_remotive_api(data, now)
+        raise ValueError(f"unrecognized JSON feed format: {path.name}")
+
+    if name.endswith(".xml") or name.endswith(".rss"):
+        text = path.read_text(encoding="utf-8")
+        lower = text.casefold()
+        if "remoteok" in name or "remoteok" in lower:
+            return "remoteok", parse_remoteok_rss(text, now)
+        if "remotive" in name or "remotive" in lower:
+            return "remotive", parse_remotive_rss(text, now)
+        if "wwr" in name or "weworkremotely" in name or "weworkremotely" in lower:
+            return "weworkremotely", parse_weworkremotely_rss(
+                text, now, preflight_approved=wwr_approved
+            )
+        raise ValueError(f"unrecognized XML/RSS feed format: {path.name}")
+
+    raise ValueError(f"unsupported feed extension: {path.name}")
+
+
+@app.command("pilot-feed-discovery")
+def pilot_feed_discovery(
+    feed_dir: Path = typer.Option(..., "--feed-dir", "--feeds", "-f"),
+    db: Path = typer.Option(..., "--db", "-d"),
+    report: Path = typer.Option(..., "--report", "-r"),
+    wwr_approved: bool = typer.Option(False, "--wwr-approved"),
+) -> None:
+    feed_root = _safe_input_directory(feed_dir)
+    database_path = _safe_output(db, feed_root)
+    report_path = _safe_output(report, feed_root)
+    markdown_path = _safe_output(report_path.with_suffix(".md"), feed_root)
+    if len({database_path, report_path, markdown_path}) != 3:
+        raise typer.BadParameter("database, JSON report, and Markdown report paths must differ")
+    if database_path.exists() or report_path.exists() or markdown_path.exists():
+        raise typer.BadParameter("pilot outputs must not already exist")
+
+    raw_items: list[RawFeedItem] = []
+    checked_sources: set[str] = set()
+    failed_sources: set[str] = set()
+    invalid_count = 0
+    digest = hashlib.sha256()
+
+    for path in sorted(feed_root.iterdir()):
+        if not path.is_file() or path.is_symlink():
+            continue
+        raw_bytes = path.read_bytes()
+        digest.update(path.name.encode("utf-8") + b"\0" + raw_bytes)
+        try:
+            source_id, items = _ingest_feed_file(path, _NOW, wwr_approved=wwr_approved)
+            checked_sources.add(source_id)
+            raw_items.extend(items)
+        except Exception:
+            invalid_count += 1
+            for candidate in ("himalayas", "remoteok", "remotive", "weworkremotely", "wwr"):
+                if candidate in path.name.casefold():
+                    norm_id = "weworkremotely" if candidate == "wwr" else candidate
+                    checked_sources.add(norm_id)
+                    failed_sources.add(norm_id)
+                    break
+
+    normalized_records: list[JobRecord] = []
+    for item in raw_items:
+        try:
+            normalized_records.append(normalize_feed_item(item, _NOW))
+        except Exception:
+            invalid_count += 1
+
+    dedup_result = deduplicate(normalized_records)
+
+    verified_records: list[JobRecord] = []
+    for record in dedup_result.records:
+        verified_record = verify_feed_listing(record)
+        verified_records.append(verified_record)
+
+    policy = _policy()
+    profile = _profile()
+    qualified: list[QualifiedJobView] = []
+    rejection_reasons: dict[str, int] = {}
+    verified_count = 0
+    needs_verification_count = 0
+    closing_soon_count = 0
+
+    for record in verified_records:
+        if record.state == JobState.VERIFIED:
+            verified_count += 1
+        elif record.authority in (
+            SourceAuthority.DISCOVERY_HINT,
+            SourceAuthority.NEEDS_VERIFICATION,
+        ):
+            needs_verification_count += 1
+
+        decision = evaluate_hard_filters(record, policy, _NOW)
+        if decision.decision.value != "qualified":
+            code = decision.reason_codes[0] if decision.reason_codes else "UNSPECIFIED"
+            rejection_reasons[code] = rejection_reasons.get(code, 0) + 1
+            continue
+
+        qualified_record = record.model_copy(
+            update={"state": JobState.QUALIFIED, "work_auth_label": decision.work_auth_label}
+        )
+        score = score_job(qualified_record, profile, policy.policy_version)
+
+        closing_soon = False
+        if record.closes_at is not None:
+            remaining_days = (record.closes_at - _NOW).total_seconds() / 86400.0
+            if 0 <= remaining_days <= 5:
+                closing_soon = True
+                closing_soon_count += 1
+
+        qualified.append(
+            QualifiedJobView(
+                job_id=record.job_id,
+                company=record.company,
+                role=record.role,
+                score=score.total_score,
+                stable_url=str(record.stable_url),
+                authority=(
+                    record.authority.value
+                    if hasattr(record.authority, "value")
+                    else str(record.authority)
+                ),
+                closing_soon=closing_soon,
+            )
+        )
+
+    duplicate_count = sum(max(0, len(group.aliases) - 1) for group in dedup_result.duplicate_groups)
+    run_id = digest.hexdigest()[:16] if raw_items else "empty"
+    run_report = RunReport(
+        run_id=f"pilot-{run_id}",
+        created_at=_NOW,
+        qualified_jobs=tuple(qualified),
+        rejection_reasons=rejection_reasons,
+        invalid_fixture_count=invalid_count,
+        duplicate_count=duplicate_count,
+        runtime_ms=0,
+        model_calls=0,
+        tool_calls=0,
+        free_credit_usage={},
+        search_retrieval_spend_usd=0.0,
+        external_actions=0,
+        discovered_count=len(dedup_result.records),
+        verified_count=verified_count,
+        needs_verification_count=needs_verification_count,
+        closing_soon_count=closing_soon_count,
+    )
+
+    with sqlite3.connect(database_path) as connection:
+        connection.execute(
+            "CREATE TABLE qualified_jobs (job_id TEXT PRIMARY KEY, payload TEXT NOT NULL)"
+        )
+        connection.executemany(
+            "INSERT INTO qualified_jobs(job_id, payload) VALUES (?, ?)",
+            [
+                (job.job_id, json.dumps(job.__dict__, sort_keys=True, separators=(",", ":")))
+                for job in run_report.qualified_jobs
+            ],
+        )
+        connection.execute(
+            "CREATE TABLE discovered_jobs ("
+            "job_id TEXT PRIMARY KEY, company TEXT, role TEXT, state TEXT, "
+            "authority TEXT, payload TEXT NOT NULL)"
+        )
+        connection.executemany(
+            "INSERT INTO discovered_jobs(job_id, company, role, state, authority, payload) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            [
+                (
+                    rec.job_id,
+                    rec.company,
+                    rec.role,
+                    rec.state.value if hasattr(rec.state, "value") else str(rec.state),
+                    rec.authority.value if hasattr(rec.authority, "value") else str(rec.authority),
+                    rec.model_dump_json(),
+                )
+                for rec in verified_records
+            ],
+        )
+    os.chmod(database_path, 0o600)
+
+    report_path.write_text(run_report.to_json(), encoding="utf-8")
+    os.chmod(report_path, 0o600)
+    markdown_path.write_text(render_markdown(run_report), encoding="utf-8")
+    os.chmod(markdown_path, 0o600)
+
+    summary = (
+        f"discovered={len(dedup_result.records)} verified={verified_count} "
+        f"qualified={len(qualified)} needs_verification={needs_verification_count} "
+        f"duplicates={duplicate_count} invalid={invalid_count}"
     )
     typer.echo(summary)
 
