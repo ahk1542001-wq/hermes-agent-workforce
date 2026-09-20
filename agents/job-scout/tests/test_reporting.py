@@ -90,3 +90,61 @@ def test_markdown_redacts_sensitive_values_in_job_fields() -> None:
     assert "synthetic-secret" not in markdown
     assert private_path not in markdown
     assert markdown.count("<REDACTED>") >= 4
+
+
+def test_feed_report_with_authority_badges_and_counts() -> None:
+    jobs = (
+        QualifiedJobView(
+            job_id="job-ats-1",
+            company="Ashby Corp",
+            role="AI Agent Engineer",
+            score=95.0,
+            stable_url="https://jobs.ashbyhq.com/ashby/1",
+            authority="ats",
+            closing_soon=True,
+        ),
+        QualifiedJobView(
+            job_id="job-official-2",
+            company="Official Co",
+            role="Workflow Developer",
+            score=90.0,
+            stable_url="https://example.com/jobs/2",
+            authority="official",
+        ),
+        QualifiedJobView(
+            job_id="job-hint-3",
+            company="Himalayas Co",
+            role="Prompt Engineer",
+            score=85.0,
+            stable_url="https://himalayas.app/jobs/3",
+            authority="discovery_hint",
+        ),
+    )
+    report = RunReport(
+        run_id="feed-digest-001",
+        created_at=NOW,
+        qualified_jobs=jobs,
+        rejection_reasons={"EXPERIENCE_TOO_HIGH": 1},
+        invalid_fixture_count=0,
+        duplicate_count=2,
+        runtime_ms=100,
+        model_calls=0,
+        tool_calls=0,
+        free_credit_usage={},
+        search_retrieval_spend_usd=0,
+        external_actions=0,
+        discovered_count=10,
+        verified_count=5,
+        needs_verification_count=3,
+        closing_soon_count=1,
+    )
+
+    md = render_markdown(report)
+    assert "[ATS] AI Agent Engineer — Ashby Corp — 95.00 ⚠️ [CLOSING SOON]" in md
+    assert "[OFFICIAL] Workflow Developer — Official Co — 90.00" in md
+    assert "[DISCOVERY_HINT] Prompt Engineer — Himalayas Co — 85.00" in md
+    assert "Discovered: 10" in md
+    assert "Verified: 5" in md
+    assert "Needs verification: 3" in md
+    assert "Closing soon: 1" in md
+    assert "## Closing Soon Alerts" in md

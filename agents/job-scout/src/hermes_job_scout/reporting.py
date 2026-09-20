@@ -19,6 +19,8 @@ class QualifiedJobView:
     role: str
     score: float
     stable_url: str
+    authority: str = ""
+    closing_soon: bool = False
 
 
 @dataclass(frozen=True)
@@ -35,6 +37,10 @@ class RunReport:
     free_credit_usage: dict[str, int]
     search_retrieval_spend_usd: float
     external_actions: int
+    discovered_count: int = 0
+    verified_count: int = 0
+    needs_verification_count: int = 0
+    closing_soon_count: int = 0
 
     def __post_init__(self) -> None:
         if self.created_at.tzinfo is None or self.created_at.utcoffset() is None:
@@ -70,21 +76,48 @@ def render_markdown(report: RunReport) -> str:
     def rows(jobs: tuple[QualifiedJobView, ...]) -> list[str]:
         if not jobs:
             return ["- None"]
-        return [
-            f"- {redact_text(job.role)} — {redact_text(job.company)} — {job.score:.2f}"
-            for job in jobs
+        items = []
+        for job in jobs:
+            badge = f"[{job.authority.upper()}] " if job.authority else ""
+            alert = " ⚠️ [CLOSING SOON]" if job.closing_soon else ""
+            role_str = redact_text(job.role)
+            comp_str = redact_text(job.company)
+            items.append(f"- {badge}{role_str} — {comp_str} — {job.score:.2f}{alert}")
+        return items
+
+    closing_soon_jobs = [job for job in report.qualified_jobs if job.closing_soon]
+    closing_alerts: list[str] = []
+    if closing_soon_jobs or report.closing_soon_count > 0:
+        alert_rows = (
+            [
+                f"- {redact_text(j.role)} at {redact_text(j.company)} (Job ID: {j.job_id})"
+                for j in closing_soon_jobs
+            ]
+            if closing_soon_jobs
+            else ["- None"]
+        )
+        closing_alerts = [
+            "## Closing Soon Alerts",
+            "",
+            *alert_rows,
+            "",
         ]
 
     lines = [
         "# Synthetic Job Scout Run Report",
         "",
         f"Qualified: {len(report.qualified_jobs)}",
+        f"Discovered: {report.discovered_count}",
+        f"Verified: {report.verified_count}",
+        f"Needs verification: {report.needs_verification_count}",
+        f"Closing soon: {report.closing_soon_count}",
         f"Duplicates: {report.duplicate_count}",
         f"Invalid fixtures: {report.invalid_fixture_count}",
         f"Model calls: {report.model_calls}",
         f"External actions: {report.external_actions}",
         f"Search/retrieval spend USD: {report.search_retrieval_spend_usd:.2f}",
         "",
+        *closing_alerts,
         "## Top 15",
         "",
         *rows(report.top),
