@@ -7,13 +7,13 @@ import re
 import unicodedata
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import urlsplit
 
 from pydantic import HttpUrl, ValidationError
 
-from .models import DiscoveryHint, ExtractedSource, SourceAuthority
+from .models import DiscoveryHint, ExtractedSource, RawFeedItem, SourceAuthority
 from .normalize import canonicalize_url
 
 
@@ -255,3 +255,83 @@ def classify_source_authority(url: str) -> SourceAuthority:
     if _is_verified_employer_job_url(host, parts.path):
         return SourceAuthority.OFFICIAL
     return SourceAuthority.NEEDS_VERIFICATION
+
+
+def _parse_published_timestamp(val: Any) -> datetime | None:
+    if val is None:
+        return None
+    if isinstance(val, (int, float)):
+        return datetime.fromtimestamp(val, tz=timezone.utc)
+    if isinstance(val, str) and val.strip():
+        val = val.strip()
+        try:
+            dt = datetime.fromisoformat(val.replace("Z", "+00:00"))
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt
+        except ValueError:
+            from email.utils import parsedate_to_datetime
+
+            try:
+                dt = parsedate_to_datetime(val)
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                return dt
+            except (TypeError, ValueError):
+                return None
+    return None
+
+
+def parse_himalayas_feed(
+    payload: Mapping[str, Any], retrieved_at: datetime
+) -> list[RawFeedItem]:
+    """Parse Himalayas public JSON API response into RawFeedItem list."""
+    retrieved_at = _require_aware(retrieved_at)
+    envelope = _mapping(payload, "Himalayas feed envelope")
+    if "data" not in envelope or not isinstance(envelope["data"], list):
+        raise SourceEnvelopeError("Himalayas feed missing or invalid 'data' list")
+
+    items: list[RawFeedItem] = []
+    for raw in envelope["data"]:
+        item = _mapping(raw, "Himalayas job item")
+        for req in ("title", "companyName", "slug"):
+            if not item.get(req) or not isinstance(item[req], str):
+                raise SourceEnvelopeError(f"Himalayas job item missing required field: {req}")
+
+        slug = _clean_text(str(item["slug"]))
+        company_slug = _clean_text(str(item.get("companySlug") or ""))
+        if item.get("url"):
+            item_url = canonicalize_url(str(item["url"]))
+        elif company_slug:
+            item_url = canonicalize_url(f"https://himalayas.app/jobs/{company_slug}/{slug}")
+        else:
+            item_url = canonicalize_url(f"https://himalayas.app/jobs/{slug}")
+
+        apply_link = item.get("applicationLink")
+        apply_url = canonicalize_url(str(apply_link)) if apply_link else None
+
+        desc = _clean_text(str(item.get("description") or item.get("excerpt") or ""))
+        published_at = _parse_published_timestamp(item.get("pubDate"))
+
+        try:
+            items.append(
+                RawFeedItem(
+                    source_name="himalayas",
+                    source_item_id=slug,
+                    title=_clean_text(str(item["title"])),
+                    company=_clean_text(str(item["companyName"])),
+                    url=HttpUrl(item_url),
+                    apply_url=HttpUrl(apply_url) if apply_url else None,
+                    description=desc,
+                    location=_clean_text(str(item.get("location") or "Worldwide")),
+                    published_at=published_at,
+                    retrieved_at=retrieved_at,
+                    is_delayed=False,
+                    authority=SourceAuthority.DISCOVERY_HINT,
+                )
+            )
+        except (TypeError, ValueError, ValidationError) as exc:
+            raise SourceEnvelopeError("Himalayas feed item failed validation") from exc
+
+    return items
+

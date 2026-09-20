@@ -1,0 +1,33 @@
+{
+  "data": [
+    {
+      "title": "AI Automation Engineer",
+      "companyName": "Acme Corp",
+      "companySlug": "acme-corp",
+      "slug": "ai-automation-engineer-123",
+      "applicationLink": "https://jobs.lever.co/acme/123",
+      "excerpt": "Build n8n workflows.",
+      "description": "Full description for AI Automation Engineer building workflows.",
+      "pubDate": 1726819200,
+      "location": "Worldwide",
+      "seniority": "Junior"
+    },
+    {
+      "title": "Agentic Workflow Developer",
+      "companyName": "Beta Labs",
+      "companySlug": "beta-labs",
+      "slug": "agentic-workflow-dev-456",
+      "applicationLink": "https://boards.greenhouse.io/betalabs/jobs/456",
+      "excerpt": "Develop agents and pipelines.",
+      "description": "Develop autonomous agent pipelines with human in the loop.",
+      "pubDate": "2026-09-20T08:00:00Z",
+      "location": "APAC Remote",
+      "seniority": "Entry-level"
+    }
+  ],
+  "meta": {
+    "totalCount": 2,
+    "limit": 50,
+    "offset": 0
+  }
+}
