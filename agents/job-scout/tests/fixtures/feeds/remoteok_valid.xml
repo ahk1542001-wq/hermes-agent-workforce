@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Remote OK AI Jobs</title>
+    <link>https://remoteok.com</link>
+    <description>Remote AI Jobs</description>
+    <item>
+      <title>SuperAI: AI Automation Specialist</title>
+      <link>https://remoteok.com/remote-jobs/12345-ai-automation-specialist</link>
+      <guid>https://remoteok.com/remote-jobs/12345-ai-automation-specialist</guid>
+      <description>Develop automation workflows with n8n and Python.</description>
+      <pubDate>Sun, 20 Sep 2026 08:00:00 +0000</pubDate>
+    </item>
+  </channel>
+</rss>

@@ -5,7 +5,8 @@ from __future__ import annotations
 import hashlib
 import re
 import unicodedata
-from collections.abc import Mapping
+import xml.etree.ElementTree as ET
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
@@ -334,4 +335,136 @@ def parse_himalayas_feed(
             raise SourceEnvelopeError("Himalayas feed item failed validation") from exc
 
     return items
+
+
+def parse_remoteok_json(
+    payload: Sequence[Any], retrieved_at: datetime
+) -> list[RawFeedItem]:
+    """Parse Remote OK public API JSON list into RawFeedItem list."""
+    retrieved_at = _require_aware(retrieved_at)
+    if not isinstance(payload, Sequence) or isinstance(payload, (str, bytes, Mapping)):
+        raise SourceEnvelopeError("Remote OK payload must be a sequence")
+    if not payload:
+        raise SourceEnvelopeError("Remote OK payload is empty")
+
+    items: list[RawFeedItem] = []
+    for raw in payload:
+        if not isinstance(raw, Mapping):
+            raise SourceEnvelopeError("Remote OK item must be a mapping")
+        # Skip legal disclaimer header object
+        if "legal" in raw and "position" not in raw and "id" not in raw:
+            continue
+        for req in ("position", "company", "id"):
+            if not raw.get(req) or not isinstance(raw[req], str):
+                raise SourceEnvelopeError(f"Remote OK job item missing required field: {req}")
+
+        item_id = _clean_text(str(raw["id"]))
+        slug = _clean_text(str(raw.get("slug") or item_id))
+        raw_url = raw.get("url")
+        if raw_url:
+            item_url = canonicalize_url(str(raw_url))
+        else:
+            item_url = canonicalize_url(f"https://remoteok.com/remote-jobs/{slug}")
+
+        apply_link = raw.get("apply_url")
+        apply_url = canonicalize_url(str(apply_link)) if apply_link else None
+
+        desc = _clean_text(str(raw.get("description") or ""))
+        published_at = _parse_published_timestamp(raw.get("epoch") or raw.get("date"))
+
+        try:
+            items.append(
+                RawFeedItem(
+                    source_name="remoteok",
+                    source_item_id=item_id,
+                    title=_clean_text(str(raw["position"])),
+                    company=_clean_text(str(raw["company"])),
+                    url=HttpUrl(item_url),
+                    apply_url=HttpUrl(apply_url) if apply_url else None,
+                    description=desc,
+                    location=_clean_text(str(raw.get("location") or "Worldwide")),
+                    published_at=published_at,
+                    retrieved_at=retrieved_at,
+                    is_delayed=False,
+                    authority=SourceAuthority.DISCOVERY_HINT,
+                )
+            )
+        except (TypeError, ValueError, ValidationError) as exc:
+            raise SourceEnvelopeError("Remote OK feed item failed validation") from exc
+
+    if not items:
+        raise SourceEnvelopeError("Remote OK payload contains no valid jobs")
+    return items
+
+
+def parse_remoteok_rss(xml_text: str, retrieved_at: datetime) -> list[RawFeedItem]:
+    """Parse Remote OK RSS XML into RawFeedItem list."""
+    retrieved_at = _require_aware(retrieved_at)
+    if not isinstance(xml_text, str) or not xml_text.strip():
+        raise SourceEnvelopeError("Remote OK RSS text must be non-empty")
+    try:
+        root = ET.fromstring(xml_text.strip())
+    except ET.ParseError as exc:
+        raise SourceEnvelopeError("Remote OK RSS XML is malformed") from exc
+
+    channel = root.find("channel")
+    if channel is None:
+        raise SourceEnvelopeError("Remote OK RSS missing channel element")
+
+    items: list[RawFeedItem] = []
+    for item_elem in channel.findall("item"):
+        title_elem = item_elem.find("title")
+        link_elem = item_elem.find("link")
+        if title_elem is None or not title_elem.text or link_elem is None or not link_elem.text:
+            raise SourceEnvelopeError("Remote OK RSS item missing title or link")
+
+        raw_title = _clean_text(title_elem.text)
+        if ": " in raw_title:
+            company, position = raw_title.split(": ", 1)
+        else:
+            company, position = "Unknown", raw_title
+
+        guid_elem = item_elem.find("guid")
+        item_id = (
+            _clean_text(guid_elem.text)
+            if guid_elem is not None and guid_elem.text
+            else _clean_text(link_elem.text)
+        )
+
+        desc_elem = item_elem.find("description")
+        desc = _clean_text(desc_elem.text) if desc_elem is not None and desc_elem.text else ""
+
+        pubdate_elem = item_elem.find("pubDate")
+        published_at = (
+            _parse_published_timestamp(pubdate_elem.text)
+            if pubdate_elem is not None
+            else None
+        )
+
+        item_url = canonicalize_url(link_elem.text)
+
+        try:
+            items.append(
+                RawFeedItem(
+                    source_name="remoteok",
+                    source_item_id=item_id,
+                    title=_clean_text(position),
+                    company=_clean_text(company),
+                    url=HttpUrl(item_url),
+                    apply_url=None,
+                    description=desc,
+                    location="Worldwide",
+                    published_at=published_at,
+                    retrieved_at=retrieved_at,
+                    is_delayed=False,
+                    authority=SourceAuthority.DISCOVERY_HINT,
+                )
+            )
+        except (TypeError, ValueError, ValidationError) as exc:
+            raise SourceEnvelopeError("Remote OK RSS item failed validation") from exc
+
+    if not items:
+        raise SourceEnvelopeError("Remote OK RSS contains no items")
+    return items
+
 

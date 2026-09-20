@@ -1,0 +1,31 @@
+[
+  {
+    "legal": "Remote OK API is free for personal use and non-commercial development. Please credit Remote OK and link to the original job post."
+  },
+  {
+    "slug": "12345-ai-automation-specialist",
+    "id": "12345",
+    "epoch": 1726819200,
+    "date": "2026-09-20T08:00:00+00:00",
+    "company": "SuperAI",
+    "position": "AI Automation Specialist",
+    "tags": ["ai", "python", "automation"],
+    "description": "Develop automation workflows with n8n and Python.",
+    "location": "Worldwide",
+    "url": "https://remoteok.com/remote-jobs/12345-ai-automation-specialist",
+    "apply_url": "https://boards.greenhouse.io/superai/jobs/999"
+  },
+  {
+    "slug": "67890-agentic-systems-builder",
+    "id": "67890",
+    "epoch": 1726822800,
+    "date": "2026-09-20T09:00:00+00:00",
+    "company": "NextGen AI",
+    "position": "Agentic Systems Builder",
+    "tags": ["llm", "agents", "mcp"],
+    "description": "Build multi-agent workflows with MCP and FastAPI.",
+    "location": "Remote",
+    "url": "https://remoteok.com/remote-jobs/67890-agentic-systems-builder",
+    "apply_url": "https://jobs.ashbyhq.com/nextgen/888"
+  }
+]
