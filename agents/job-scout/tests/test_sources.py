@@ -203,4 +203,3 @@ def test_source_catalog_contains_approved_ladder() -> None:
     wwr = get_source_catalog_entry("weworkremotely")
     assert wwr.preflight_required is True
     assert wwr.initial_authority is SourceAuthority.DISCOVERY_HINT
-

@@ -541,4 +541,3 @@ def test_raw_feed_item_authority_cannot_be_promoted() -> None:
             retrieved_at=NOW,
             authority=SourceAuthority.OFFICIAL,
         )
-

@@ -53,13 +53,35 @@ def test_parses_valid_remoteok_rss() -> None:
 
 def test_remoteok_malformed_fails_closed() -> None:
     with pytest.raises(SourceEnvelopeError):
+        parse_remoteok_json([], NOW)  # empty sequence
+
+    with pytest.raises(SourceEnvelopeError):
         parse_remoteok_json("not-a-list", NOW)  # type: ignore[arg-type]
 
     with pytest.raises(SourceEnvelopeError):
         parse_remoteok_json([{"legal": "info"}], NOW)  # only legal header, no jobs
 
     with pytest.raises(SourceEnvelopeError):
+        parse_remoteok_json([{"legal": "info"}, "not-a-dict"], NOW)  # non-mapping item
+
+    with pytest.raises(SourceEnvelopeError):
+        parse_remoteok_json([{"position": "Dev"}], NOW)  # missing company/id
+
+    with pytest.raises(SourceEnvelopeError):
         parse_remoteok_rss("<invalid xml", NOW)
 
     with pytest.raises(SourceEnvelopeError):
         parse_remoteok_rss("<rss><channel></channel></rss>", NOW)  # no items
+
+
+def test_remoteok_url_fallback() -> None:
+    payload = [
+        {
+            "id": "789",
+            "position": "Engineer",
+            "company": "Beta",
+            "slug": "engineer-789",
+        }
+    ]
+    items = parse_remoteok_json(payload, NOW)
+    assert str(items[0].url) == "https://remoteok.com/remote-jobs/engineer-789"

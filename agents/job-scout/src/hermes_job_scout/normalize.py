@@ -13,9 +13,17 @@ from datetime import datetime
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
-from pydantic import HttpUrl, ValidationError
+from pydantic import AnyHttpUrl, HttpUrl, ValidationError
 
-from .models import Decision, JobRecord, JobState, SourceAuthority, WorkType
+from .models import (
+    Decision,
+    EvidenceRef,
+    JobRecord,
+    JobState,
+    RawFeedItem,
+    SourceAuthority,
+    WorkType,
+)
 
 _TRACKING_KEY_RE = re.compile(r"^utm_", re.IGNORECASE)
 _TRACKING_KEYS = {"trk", "trackingid", "ref"}
@@ -133,6 +141,71 @@ def normalize_job(raw: Mapping[str, Any], retrieved_at: datetime) -> JobRecord:
         )
     except (TypeError, ValueError, ValidationError) as exc:
         raise ValueError("job input failed strict normalization") from exc
+    description_hash = hashlib.sha256(description.encode("utf-8")).hexdigest()
+    fingerprint = _fingerprint_parts(record, description_hash)
+    return record.model_copy(update={"fingerprint": fingerprint})
+
+
+def normalize_feed_item(
+    item: RawFeedItem,
+    retrieved_at: datetime,
+    work_type: WorkType = WorkType.FULL_TIME,
+) -> JobRecord:
+    """Normalize a RawFeedItem into a conservative JobRecord."""
+
+    if not isinstance(item, RawFeedItem):
+        raise ValueError("item must be a RawFeedItem")
+    if retrieved_at.tzinfo is None or retrieved_at.utcoffset() is None:
+        raise ValueError("retrieved_at must include a timezone")
+
+    stable_url = canonicalize_url(str(item.url))
+    company = _clean_text(item.company)
+    role = _clean_text(item.title)
+    job_id = _clean_text(item.source_item_id)
+    location = _clean_text(item.location) if item.location else "Worldwide"
+    description = _clean_text(item.description)
+
+    evidence_refs: list[EvidenceRef] = []
+    if item.apply_url is not None:
+        canonical_apply = canonicalize_url(str(item.apply_url))
+        evidence_refs.append(
+            EvidenceRef(
+                field="apply_url",
+                source_url=AnyHttpUrl(canonical_apply),
+                retrieved_at=retrieved_at,
+            )
+        )
+
+    first_seen = (
+        min(item.published_at, retrieved_at) if item.published_at is not None else retrieved_at
+    )
+
+    record = JobRecord(
+        job_id=job_id,
+        stable_url=HttpUrl(stable_url),
+        source_type=item.authority.value,
+        authority=item.authority,
+        company=company,
+        role=role,
+        first_seen_at=first_seen,
+        last_verified_at=retrieved_at,
+        posted_at=item.published_at,
+        closes_at=None,
+        work_type=work_type,
+        location=location,
+        remote_region=location,
+        experience="0-3 years",
+        language=[],
+        skills=[],
+        salary_evidence=[],
+        work_authorization_evidence=[],
+        evidence_refs=evidence_refs,
+        uncertainty_flags=[],
+        fingerprint="0" * 64,
+        state=JobState.DISCOVERED,
+        owner_decision=Decision.NEEDS_VICTOR,
+        work_auth_label=None,
+    )
     description_hash = hashlib.sha256(description.encode("utf-8")).hexdigest()
     fingerprint = _fingerprint_parts(record, description_hash)
     return record.model_copy(update={"fingerprint": fingerprint})

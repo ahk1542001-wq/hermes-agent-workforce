@@ -283,9 +283,7 @@ def _parse_published_timestamp(val: Any) -> datetime | None:
     return None
 
 
-def parse_himalayas_feed(
-    payload: Mapping[str, Any], retrieved_at: datetime
-) -> list[RawFeedItem]:
+def parse_himalayas_feed(payload: Mapping[str, Any], retrieved_at: datetime) -> list[RawFeedItem]:
     """Parse Himalayas public JSON API response into RawFeedItem list."""
     retrieved_at = _require_aware(retrieved_at)
     envelope = _mapping(payload, "Himalayas feed envelope")
@@ -337,9 +335,7 @@ def parse_himalayas_feed(
     return items
 
 
-def parse_remoteok_json(
-    payload: Sequence[Any], retrieved_at: datetime
-) -> list[RawFeedItem]:
+def parse_remoteok_json(payload: Sequence[Any], retrieved_at: datetime) -> list[RawFeedItem]:
     """Parse Remote OK public API JSON list into RawFeedItem list."""
     retrieved_at = _require_aware(retrieved_at)
     if not isinstance(payload, Sequence) or isinstance(payload, (str, bytes, Mapping)):
@@ -436,9 +432,7 @@ def parse_remoteok_rss(xml_text: str, retrieved_at: datetime) -> list[RawFeedIte
 
         pubdate_elem = item_elem.find("pubDate")
         published_at = (
-            _parse_published_timestamp(pubdate_elem.text)
-            if pubdate_elem is not None
-            else None
+            _parse_published_timestamp(pubdate_elem.text) if pubdate_elem is not None else None
         )
 
         item_url = canonicalize_url(link_elem.text)
@@ -468,9 +462,7 @@ def parse_remoteok_rss(xml_text: str, retrieved_at: datetime) -> list[RawFeedIte
     return items
 
 
-def parse_remotive_api(
-    payload: Mapping[str, Any], retrieved_at: datetime
-) -> list[RawFeedItem]:
+def parse_remotive_api(payload: Mapping[str, Any], retrieved_at: datetime) -> list[RawFeedItem]:
     """Parse Remotive public API response into RawFeedItem list with delay metadata."""
     retrieved_at = _require_aware(retrieved_at)
     envelope = _mapping(payload, "Remotive feed envelope")
@@ -560,9 +552,7 @@ def parse_remotive_rss(xml_text: str, retrieved_at: datetime) -> list[RawFeedIte
 
         pubdate_elem = item_elem.find("pubDate")
         published_at = (
-            _parse_published_timestamp(pubdate_elem.text)
-            if pubdate_elem is not None
-            else None
+            _parse_published_timestamp(pubdate_elem.text) if pubdate_elem is not None else None
         )
 
         item_url = canonicalize_url(link_elem.text)
@@ -639,9 +629,7 @@ def parse_weworkremotely_rss(
 
         pubdate_elem = item_elem.find("pubDate")
         published_at = (
-            _parse_published_timestamp(pubdate_elem.text)
-            if pubdate_elem is not None
-            else None
+            _parse_published_timestamp(pubdate_elem.text) if pubdate_elem is not None else None
         )
 
         item_url = canonicalize_url(link_elem.text)
@@ -669,7 +657,3 @@ def parse_weworkremotely_rss(
     if not items:
         raise SourceEnvelopeError("We Work Remotely RSS contains no items")
     return items
-
-
-
-

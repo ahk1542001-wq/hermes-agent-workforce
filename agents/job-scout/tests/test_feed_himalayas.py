@@ -48,3 +48,32 @@ def test_himalayas_malformed_and_missing_fields_fail_closed() -> None:
 
     with pytest.raises(SourceEnvelopeError):
         parse_himalayas_feed({"data": []}, datetime(2026, 9, 20, 9, 0))  # naive datetime
+
+
+def test_himalayas_url_slug_fallbacks() -> None:
+    # missing url, has companySlug
+    payload1 = {
+        "data": [
+            {
+                "title": "Engineer",
+                "companyName": "Acme",
+                "slug": "eng-1",
+                "companySlug": "acme",
+            }
+        ]
+    }
+    items1 = parse_himalayas_feed(payload1, NOW)
+    assert str(items1[0].url) == "https://himalayas.app/jobs/acme/eng-1"
+
+    # missing url, missing companySlug
+    payload2 = {
+        "data": [
+            {
+                "title": "Engineer",
+                "companyName": "Acme",
+                "slug": "eng-2",
+            }
+        ]
+    }
+    items2 = parse_himalayas_feed(payload2, NOW)
+    assert str(items2[0].url) == "https://himalayas.app/jobs/eng-2"

@@ -25,7 +25,9 @@ def test_parses_valid_remotive_api_with_delay_metadata() -> None:
     assert first.source_item_id == "1928374"
     assert first.title == "AI Automation Developer"
     assert first.company == "CloudScale"
-    assert str(first.url) == "https://remotive.com/remote-jobs/software-dev/ai-automation-dev-1928374"
+    assert (
+        str(first.url) == "https://remotive.com/remote-jobs/software-dev/ai-automation-dev-1928374"
+    )
     assert first.is_delayed is True
     assert first.metadata.get("source_delay") == "documented_24h_delay"
     assert first.authority is SourceAuthority.DISCOVERY_HINT

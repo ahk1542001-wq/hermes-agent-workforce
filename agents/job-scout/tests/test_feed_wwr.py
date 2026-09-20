@@ -28,7 +28,10 @@ def test_parses_valid_wwr_rss_when_preflight_approved() -> None:
     assert item.source_name == "weworkremotely"
     assert item.title == "AI Automation Architect"
     assert item.company == "CognitiveWorks"
-    assert str(item.url) == "https://weworkremotely.com/remote-jobs/cognitiveworks-ai-automation-architect"
+    assert (
+        str(item.url)
+        == "https://weworkremotely.com/remote-jobs/cognitiveworks-ai-automation-architect"
+    )
     assert item.authority is SourceAuthority.DISCOVERY_HINT
     assert item.published_at is not None
     assert item.published_at.tzinfo is not None
