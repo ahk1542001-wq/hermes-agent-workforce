@@ -169,6 +169,29 @@ class DiscoveryHint(StrictModel):
         return value
 
 
+class RawFeedItem(StrictModel):
+    source_name: str = Field(min_length=1, max_length=100)
+    source_item_id: str = Field(min_length=1, max_length=120)
+    title: str = Field(min_length=1, max_length=300)
+    company: str = Field(min_length=1, max_length=200)
+    url: HttpUrl
+    apply_url: HttpUrl | None = None
+    description: str = Field(default="", max_length=50_000)
+    location: str = Field(default="Worldwide", max_length=200)
+    published_at: datetime | None = None
+    retrieved_at: datetime
+    is_delayed: bool = False
+    authority: SourceAuthority = SourceAuthority.DISCOVERY_HINT
+    metadata: dict[str, str] = Field(default_factory=dict)
+
+    @field_validator("authority")
+    @classmethod
+    def _must_remain_a_hint(cls, value: SourceAuthority) -> SourceAuthority:
+        if value is not SourceAuthority.DISCOVERY_HINT:
+            raise ValueError("a raw feed item cannot claim official verification")
+        return value
+
+
 class ExtractedSource(StrictModel):
     provider: str = Field(min_length=1, max_length=100)
     url: HttpUrl
@@ -409,6 +432,7 @@ __all__: list[str] = [
     "FitScore",
     "JobRecord",
     "JobState",
+    "RawFeedItem",
     "SearchPolicy",
     "SourceAuthority",
     "SourceRecord",

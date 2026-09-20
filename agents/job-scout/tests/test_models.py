@@ -482,3 +482,63 @@ def test_candidate_profile_languages_must_be_verified_claims() -> None:
     payload["languages"]["French"] = "native"
     with pytest.raises(ValidationError):
         CandidateProfile.model_validate(payload)
+
+
+def test_raw_feed_item_validation() -> None:
+    from hermes_job_scout.models import RawFeedItem, SourceAuthority
+
+    item = RawFeedItem(
+        source_name="himalayas",
+        source_item_id="h-123",
+        title="AI Engineer",
+        company="Acme Corp",
+        url="https://himalayas.app/jobs/acme/ai-engineer",
+        apply_url="https://jobs.lever.co/acme/123",
+        description="Build workflows",
+        location="Worldwide",
+        published_at=NOW,
+        retrieved_at=NOW,
+        is_delayed=False,
+    )
+    assert item.authority is SourceAuthority.DISCOVERY_HINT
+    assert str(item.url) == "https://himalayas.app/jobs/acme/ai-engineer"
+    assert str(item.apply_url) == "https://jobs.lever.co/acme/123"
+
+    # Forbid unknown extra fields
+    with pytest.raises(ValidationError):
+        RawFeedItem(
+            source_name="himalayas",
+            source_item_id="h-123",
+            title="AI Engineer",
+            company="Acme Corp",
+            url="https://himalayas.app/jobs/acme/ai-engineer",
+            retrieved_at=NOW,
+            extra_field="disallowed",
+        )
+
+    # Forbid non-timezone-aware timestamp
+    with pytest.raises(ValidationError):
+        RawFeedItem(
+            source_name="himalayas",
+            source_item_id="h-123",
+            title="AI Engineer",
+            company="Acme Corp",
+            url="https://himalayas.app/jobs/acme/ai-engineer",
+            retrieved_at=datetime(2026, 9, 15, 8, 0),  # naive
+        )
+
+
+def test_raw_feed_item_authority_cannot_be_promoted() -> None:
+    from hermes_job_scout.models import RawFeedItem, SourceAuthority
+
+    with pytest.raises(ValidationError):
+        RawFeedItem(
+            source_name="himalayas",
+            source_item_id="h-123",
+            title="AI Engineer",
+            company="Acme Corp",
+            url="https://himalayas.app/jobs/acme/ai-engineer",
+            retrieved_at=NOW,
+            authority=SourceAuthority.OFFICIAL,
+        )
+
