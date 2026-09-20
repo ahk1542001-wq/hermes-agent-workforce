@@ -32,7 +32,17 @@ _SPONSORSHIP_PATTERNS = (
     re.compile(r"\bsponsor(?:s|ed|ing|ship)?\b.{0,40}\b(?:visa|work[- ]?permit)\b", re.I),
     re.compile(r"\b(?:visa|work[- ]?permit)\b.{0,40}\bsponsor(?:s|ed|ing|ship)?\b", re.I),
 )
-_AI_ROLE_TERMS = ("ai", "automation", "agentic", "llm", "n8n", "workflow")
+_AI_ROLE_PATTERNS = tuple(
+    re.compile(pattern, re.I)
+    for pattern in (
+        r"\bAI\b",
+        r"\bautomation\b",
+        r"\bagentic\b",
+        r"\bLLMs?\b",
+        r"\bn8n\b",
+        r"\bworkflows?\b",
+    )
+)
 _THAI_DISALLOWED_LEVELS = ("fluent", "native", "business", "professional", "required")
 _YEAR_PATTERN = re.compile(
     r"(?P<low>\d+)\s*(?:(?:-|–|to)\s*(?P<high>\d+)|(?P<plus>\+))?\s*years?", re.I
@@ -81,9 +91,9 @@ def _reject(code: str, work_auth: WorkAuthLabel) -> PolicyDecision:
 
 def _role_matches(job: JobRecord, policy: SearchPolicy) -> bool:
     role = job.role.casefold()
-    if any(alias.casefold() in role or role in alias.casefold() for alias in policy.role_aliases):
+    if any(alias.casefold() in role for alias in policy.role_aliases):
         return True
-    return any(term in role for term in _AI_ROLE_TERMS)
+    return any(pattern.search(job.role) for pattern in _AI_ROLE_PATTERNS)
 
 
 def _geography_matches(job: JobRecord, policy: SearchPolicy) -> bool:

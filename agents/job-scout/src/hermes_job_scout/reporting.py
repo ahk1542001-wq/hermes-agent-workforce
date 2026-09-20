@@ -7,7 +7,7 @@ from dataclasses import asdict, dataclass
 from datetime import datetime
 from typing import cast
 
-from .redaction import redact_data
+from .redaction import redact_data, redact_text
 
 
 @dataclass(frozen=True)
@@ -68,7 +68,10 @@ def render_markdown(report: RunReport) -> str:
     def rows(jobs: tuple[QualifiedJobView, ...]) -> list[str]:
         if not jobs:
             return ["- None"]
-        return [f"- {job.role} — {job.company} — {job.score:.2f}" for job in jobs]
+        return [
+            f"- {redact_text(job.role)} — {redact_text(job.company)} — {job.score:.2f}"
+            for job in jobs
+        ]
 
     lines = [
         "# Synthetic Job Scout Run Report",

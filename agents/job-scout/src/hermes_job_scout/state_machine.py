@@ -8,7 +8,7 @@ from typing import Mapping
 from uuid import uuid4
 
 from .database import JobStore
-from .models import ApplicationEvent, JobState
+from .models import ApplicationEvent, JobRecord, JobState
 
 
 class InvalidTransition(RuntimeError):
@@ -97,7 +97,10 @@ def transition(job_id: str, target: JobState, context: TransitionContext) -> int
             f"transition {current.state.value} -> {target.value} is not allowed"
         )
 
-    updated = current.model_copy(update={"state": target})
+    try:
+        updated = JobRecord.model_validate({**current.model_dump(mode="python"), "state": target})
+    except ValueError as exc:
+        raise InvalidTransition("target state violates job invariants") from exc
     event = ApplicationEvent(
         event_id=f"transition-{uuid4().hex}",
         job_id=job_id,

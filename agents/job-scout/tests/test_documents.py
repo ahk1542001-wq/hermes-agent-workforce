@@ -78,19 +78,48 @@ def _draft(**updates: object) -> ApplicationPackDraft:
     values: dict[str, object] = {
         "identity": DraftClaim("Synthetic Candidate", "identity"),
         "headline": DraftClaim("AI Automation Engineer", "headline"),
-        "summary": DraftClaim("safe automation workflows", "summary"),
+        "summary": DraftClaim("Builds safe evidence backed automation workflows", "summary"),
         "skills": (DraftClaim("Python", "python"), DraftClaim("n8n", "n8n")),
-        "experience": (DraftClaim("automation workflows Built tested", "experience"),),
-        "education": (DraftClaim("Independent AI study", "education"),),
+        "experience": (
+            DraftClaim("Built tested automation workflows for small teams", "experience"),
+        ),
+        "education": (DraftClaim("Independent AI automation study", "education"),),
     }
     values.update(updates)
     return ApplicationPackDraft(**values)
 
 
-def test_supported_shortening_and_reordering_pass() -> None:
-    report = validate_truth_subset(_draft(), _facts())
+def test_supported_exact_wording_with_normalized_case_and_whitespace_passes() -> None:
+    normalized_variant = "  builds SAFE evidence backed automation workflows "
+    draft = _draft(summary=DraftClaim(normalized_variant, "summary"))
+    report = validate_truth_subset(draft, _facts())
     assert report.supported is True
     assert report.unsupported_claims == ()
+
+
+@pytest.mark.parametrize(
+    ("allowed", "claim"),
+    [
+        ("Beginner Python", "Python"),
+        ("Builds safe evidence backed automation workflows", "safe automation workflows"),
+        ("Built tested automation workflows for small teams", "automation workflows Built tested"),
+    ],
+)
+def test_unapproved_shortening_or_reordering_is_rejected(allowed: str, claim: str) -> None:
+    facts = _facts()
+    facts.append(
+        CandidateFact(
+            fact_id="exact",
+            category="experience",
+            allowed_wording=allowed,
+            source="synthetic fixture",
+            verified=True,
+        )
+    )
+    draft = _draft(experience=(DraftClaim(claim, "exact"),))
+    report = validate_truth_subset(draft, facts)
+    assert report.supported is False
+    assert "UNSUPPORTED_CLAIM" in report.reason_codes
 
 
 @pytest.mark.parametrize(
@@ -119,6 +148,33 @@ def test_unsupported_metric_is_rejected() -> None:
     report = validate_truth_subset(draft, _facts())
     assert report.supported is False
     assert report.unsupported_claims == ("Improved automation revenue by 40 percent",)
+
+
+@pytest.mark.parametrize(
+    ("allowed", "claim"),
+    [
+        ("No production experience", "production experience"),
+        ("Thai basic", "Thai"),
+        ("Worked from June 2020 to December 2022", "Worked"),
+    ],
+)
+def test_meaning_changing_omissions_are_rejected(allowed: str, claim: str) -> None:
+    facts = _facts()
+    facts.append(
+        CandidateFact(
+            fact_id="guarded",
+            category="experience",
+            allowed_wording=allowed,
+            source="synthetic fixture",
+            verified=True,
+        )
+    )
+    draft = _draft(experience=(DraftClaim(claim, "guarded"),))
+
+    report = validate_truth_subset(draft, facts)
+
+    assert report.supported is False
+    assert report.reason_codes == ("UNSUPPORTED_CLAIM",)
 
 
 def test_repeated_supported_token_keyword_stuffing_is_rejected() -> None:

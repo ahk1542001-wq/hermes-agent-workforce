@@ -56,3 +56,37 @@ def test_json_and_markdown_are_structured_redacted_and_deterministic() -> None:
     assert "Top 15" in markdown
     assert "Secondary 20" in markdown
     assert "Full qualified board" in markdown
+
+
+def test_markdown_redacts_sensitive_values_in_job_fields() -> None:
+    private_path = "/" + "/".join(("Users", "example", "private-note"))
+    report = RunReport(
+        run_id="synthetic-redaction",
+        created_at=NOW,
+        qualified_jobs=(
+            QualifiedJobView(
+                job_id="job-sensitive",
+                company="Contact person@example.com or +66 81 234 5678",
+                role=f"token=synthetic-secret {private_path}",
+                score=91.0,
+                stable_url="https://careers.example.com/jobs/sensitive",
+            ),
+        ),
+        rejection_reasons={},
+        invalid_fixture_count=0,
+        duplicate_count=0,
+        runtime_ms=0,
+        model_calls=0,
+        tool_calls=0,
+        free_credit_usage={},
+        search_retrieval_spend_usd=0,
+        external_actions=0,
+    )
+
+    markdown = render_markdown(report)
+
+    assert "person@example.com" not in markdown
+    assert "+66 81 234 5678" not in markdown
+    assert "synthetic-secret" not in markdown
+    assert private_path not in markdown
+    assert markdown.count("<REDACTED>") >= 4

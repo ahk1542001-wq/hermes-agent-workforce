@@ -154,6 +154,13 @@ def test_non_ai_role_is_rejected() -> None:
     assert result.reason_codes == ("NON_AI_ROLE",)
 
 
+@pytest.mark.parametrize("role", ["Retail Assistant", "Email Support Specialist"])
+def test_ai_letter_sequence_is_not_an_ai_role(role: str) -> None:
+    result = evaluate_hard_filters(_job(role=role), _policy(), NOW)
+    assert result.decision is Decision.REJECTED
+    assert result.reason_codes == ("NON_AI_ROLE",)
+
+
 def test_fluent_thai_is_rejected() -> None:
     result = evaluate_hard_filters(_job(language=["English", "Thai fluent"]), _policy(), NOW)
     assert result.decision is Decision.REJECTED

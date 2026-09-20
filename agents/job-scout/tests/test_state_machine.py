@@ -164,3 +164,26 @@ def test_untrusted_evidence_cannot_override_transition_audit_fields(tmp_path: Pa
     assert event.details["from"] == "discovered"
     assert event.details["to"] == "verified"
     store.close()
+
+
+@pytest.mark.parametrize(
+    "authority", [SourceAuthority.DISCOVERY_HINT, SourceAuthority.NEEDS_VERIFICATION]
+)
+def test_unverified_source_cannot_transition_to_verified(
+    tmp_path: Path, authority: SourceAuthority
+) -> None:
+    paths = WorkspacePaths.from_root(tmp_path / f"Career-{authority.value}")
+    bootstrap_private_workspace(paths)
+    store = JobStore.open(paths.database, paths.marker.read_text(encoding="utf-8"))
+    payload = _job(JobState.DISCOVERED).model_dump(mode="python")
+    payload.update({"authority": authority, "source_type": authority.value})
+    store.upsert_job(JobRecord.model_validate(payload), expected_revision=0)
+
+    with pytest.raises(InvalidTransition, match="violates job invariants"):
+        transition("job-1", JobState.VERIFIED, _context(store))
+
+    assert store.get_job("job-1").state is JobState.DISCOVERED
+    events = store.list_events("job-1")
+    assert len(events) == 1
+    assert events[0].event_type == "job_upserted"
+    store.close()

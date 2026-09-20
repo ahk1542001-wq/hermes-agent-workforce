@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
-from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -16,7 +14,6 @@ from reportlab.pdfgen.canvas import Canvas  # type: ignore[import-untyped]
 
 from .models import CandidateFact
 
-_TOKEN_RE = re.compile(r"[A-Za-z0-9]+(?:[.+#-][A-Za-z0-9]+)*")
 _HEADINGS = ("PROFILE", "SKILLS", "EXPERIENCE", "EDUCATION")
 
 
@@ -45,10 +42,6 @@ class TruthReport:
     reason_codes: tuple[str, ...]
 
 
-def _tokens(value: str) -> tuple[str, ...]:
-    return tuple(token.casefold() for token in _TOKEN_RE.findall(value))
-
-
 def _claims(draft: ApplicationPackDraft) -> tuple[DraftClaim, ...]:
     return (
         draft.identity,
@@ -64,7 +57,7 @@ def validate_truth_subset(
     draft: ApplicationPackDraft,
     facts: list[CandidateFact],
 ) -> TruthReport:
-    """Allow shortening/reordering, but no token absent from the bound approved fact."""
+    """Require exact owner-approved wording after whitespace/case normalization."""
 
     approved = {fact.fact_id: fact for fact in facts if fact.verified}
     unsupported: list[str] = []
@@ -83,12 +76,8 @@ def validate_truth_subset(
             if "UNAPPROVED_FACT" not in reasons:
                 reasons.append("UNAPPROVED_FACT")
             continue
-        claim_tokens = _tokens(claim.text)
-        allowed_tokens = Counter(_tokens(fact.allowed_wording))
-        claim_counts = Counter(claim_tokens)
-        if not claim_tokens or any(
-            count > allowed_tokens[token] for token, count in claim_counts.items()
-        ):
+        allowed_normalized = " ".join(fact.allowed_wording.split()).casefold()
+        if not normalized or normalized != allowed_normalized:
             unsupported.append(claim.text)
             if "UNSUPPORTED_CLAIM" not in reasons:
                 reasons.append("UNSUPPORTED_CLAIM")
