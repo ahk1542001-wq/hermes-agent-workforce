@@ -239,7 +239,7 @@ class DiscoveryRun(StrictModel):
     pages_checked: int = Field(default=0, ge=0)
     cache_hits: int = Field(default=0, ge=0)
     free_credits_remaining: dict[str, int] = Field(default_factory=dict)
-    model_calls: int = Field(default=0, ge=0)
+    model_calls: int = Field(default=0, ge=0, le=0)
     actual_search_retrieval_spend_usd: float = Field(default=0, ge=0, le=0)
 
     @field_validator("coverage")

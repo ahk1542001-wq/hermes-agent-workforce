@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from hermes_job_scout.database import DatabaseError, JobStore
 from hermes_job_scout.models import (
@@ -152,3 +153,37 @@ def test_format_run_summary_full_coverage_no_sources() -> None:
     summary = format_run_summary(run)
     assert "Coverage: full" in summary
     assert "Failed sources: None" in summary
+
+
+def test_discovery_run_rejects_positive_model_calls() -> None:
+    with pytest.raises(ValidationError, match="less than or equal to 0"):
+        DiscoveryRun(
+            run_id="run-violation-001",
+            started_at=NOW,
+            completed_at=LATER,
+            coverage="full",
+            checked_source_ids=["himalayas"],
+            failed_source_ids=[],
+            changed_count=0,
+            result_count=0,
+            provider="structured_feed_runner",
+            model_calls=1,
+            actual_search_retrieval_spend_usd=0.0,
+        )
+
+
+def test_discovery_run_rejects_positive_spend() -> None:
+    with pytest.raises(ValidationError, match="less than or equal to 0"):
+        DiscoveryRun(
+            run_id="run-violation-002",
+            started_at=NOW,
+            completed_at=LATER,
+            coverage="full",
+            checked_source_ids=["himalayas"],
+            failed_source_ids=[],
+            changed_count=0,
+            result_count=0,
+            provider="structured_feed_runner",
+            model_calls=0,
+            actual_search_retrieval_spend_usd=0.05,
+        )
