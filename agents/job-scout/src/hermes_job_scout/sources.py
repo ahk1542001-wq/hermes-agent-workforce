@@ -468,3 +468,129 @@ def parse_remoteok_rss(xml_text: str, retrieved_at: datetime) -> list[RawFeedIte
     return items
 
 
+def parse_remotive_api(
+    payload: Mapping[str, Any], retrieved_at: datetime
+) -> list[RawFeedItem]:
+    """Parse Remotive public API response into RawFeedItem list with delay metadata."""
+    retrieved_at = _require_aware(retrieved_at)
+    envelope = _mapping(payload, "Remotive feed envelope")
+    if "jobs" not in envelope or not isinstance(envelope["jobs"], list):
+        raise SourceEnvelopeError("Remotive feed missing or invalid 'jobs' list")
+    if not envelope["jobs"]:
+        raise SourceEnvelopeError("Remotive feed contains no jobs")
+
+    items: list[RawFeedItem] = []
+    for raw in envelope["jobs"]:
+        item = _mapping(raw, "Remotive job item")
+        for req in ("id", "title", "company_name", "url"):
+            if not item.get(req):
+                raise SourceEnvelopeError(f"Remotive job item missing required field: {req}")
+
+        item_id = _clean_text(str(item["id"]))
+        item_url = canonicalize_url(str(item["url"]))
+        published_at = _parse_published_timestamp(item.get("publication_date"))
+        desc = _clean_text(str(item.get("description") or ""))
+        loc = _clean_text(str(item.get("candidate_required_location") or "Worldwide"))
+
+        metadata = {"source_delay": "documented_24h_delay"}
+        salary = item.get("salary")
+        if salary and isinstance(salary, str) and salary.strip():
+            metadata["salary_hint"] = _clean_text(salary)
+
+        try:
+            items.append(
+                RawFeedItem(
+                    source_name="remotive",
+                    source_item_id=item_id,
+                    title=_clean_text(str(item["title"])),
+                    company=_clean_text(str(item["company_name"])),
+                    url=HttpUrl(item_url),
+                    apply_url=None,
+                    description=desc,
+                    location=loc,
+                    published_at=published_at,
+                    retrieved_at=retrieved_at,
+                    is_delayed=True,
+                    authority=SourceAuthority.DISCOVERY_HINT,
+                    metadata=metadata,
+                )
+            )
+        except (TypeError, ValueError, ValidationError) as exc:
+            raise SourceEnvelopeError("Remotive feed item failed validation") from exc
+
+    return items
+
+
+def parse_remotive_rss(xml_text: str, retrieved_at: datetime) -> list[RawFeedItem]:
+    """Parse Remotive RSS XML into RawFeedItem list with delay metadata."""
+    retrieved_at = _require_aware(retrieved_at)
+    if not isinstance(xml_text, str) or not xml_text.strip():
+        raise SourceEnvelopeError("Remotive RSS text must be non-empty")
+    try:
+        root = ET.fromstring(xml_text.strip())
+    except ET.ParseError as exc:
+        raise SourceEnvelopeError("Remotive RSS XML is malformed") from exc
+
+    channel = root.find("channel")
+    if channel is None:
+        raise SourceEnvelopeError("Remotive RSS missing channel element")
+
+    items: list[RawFeedItem] = []
+    for item_elem in channel.findall("item"):
+        title_elem = item_elem.find("title")
+        link_elem = item_elem.find("link")
+        if title_elem is None or not title_elem.text or link_elem is None or not link_elem.text:
+            raise SourceEnvelopeError("Remotive RSS item missing title or link")
+
+        raw_title = _clean_text(title_elem.text)
+        if ": " in raw_title:
+            company, position = raw_title.split(": ", 1)
+        else:
+            company, position = "Unknown", raw_title
+
+        guid_elem = item_elem.find("guid")
+        item_id = (
+            _clean_text(guid_elem.text)
+            if guid_elem is not None and guid_elem.text
+            else _clean_text(link_elem.text)
+        )
+
+        desc_elem = item_elem.find("description")
+        desc = _clean_text(desc_elem.text) if desc_elem is not None and desc_elem.text else ""
+
+        pubdate_elem = item_elem.find("pubDate")
+        published_at = (
+            _parse_published_timestamp(pubdate_elem.text)
+            if pubdate_elem is not None
+            else None
+        )
+
+        item_url = canonicalize_url(link_elem.text)
+
+        try:
+            items.append(
+                RawFeedItem(
+                    source_name="remotive",
+                    source_item_id=item_id,
+                    title=_clean_text(position),
+                    company=_clean_text(company),
+                    url=HttpUrl(item_url),
+                    apply_url=None,
+                    description=desc,
+                    location="Worldwide",
+                    published_at=published_at,
+                    retrieved_at=retrieved_at,
+                    is_delayed=True,
+                    authority=SourceAuthority.DISCOVERY_HINT,
+                    metadata={"source_delay": "documented_24h_delay"},
+                )
+            )
+        except (TypeError, ValueError, ValidationError) as exc:
+            raise SourceEnvelopeError("Remotive RSS item failed validation") from exc
+
+    if not items:
+        raise SourceEnvelopeError("Remotive RSS contains no items")
+    return items
+
+
+

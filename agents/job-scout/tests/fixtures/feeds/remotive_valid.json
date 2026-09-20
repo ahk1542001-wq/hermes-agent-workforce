@@ -1,0 +1,30 @@
+{
+  "0-legal-notice": "Remotive API is free for personal use. Public feed has a 24-hour delay.",
+  "job-count": 2,
+  "jobs": [
+    {
+      "id": 1928374,
+      "url": "https://remotive.com/remote-jobs/software-dev/ai-automation-dev-1928374",
+      "title": "AI Automation Developer",
+      "company_name": "CloudScale",
+      "category": "Software Development",
+      "job_type": "full_time",
+      "publication_date": "2026-09-19T12:00:00",
+      "candidate_required_location": "Worldwide",
+      "salary": "$80,000 - $100,000",
+      "description": "Build agentic AI workflows and integrations."
+    },
+    {
+      "id": 5647382,
+      "url": "https://remotive.com/remote-jobs/software-dev/workflow-engineer-5647382",
+      "title": "Workflow Engineer",
+      "company_name": "DataFlow",
+      "category": "Software Development",
+      "job_type": "contract",
+      "publication_date": "2026-09-19T14:00:00Z",
+      "candidate_required_location": "APAC Remote",
+      "salary": "",
+      "description": "Build n8n and Python integrations."
+    }
+  ]
+}
