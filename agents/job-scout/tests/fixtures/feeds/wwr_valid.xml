@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>We Work Remotely: Remote Programming Jobs</title>
+    <link>https://weworkremotely.com</link>
+    <description>Remote programming jobs from We Work Remotely</description>
+    <item>
+      <title>CognitiveWorks: AI Automation Architect</title>
+      <link>https://weworkremotely.com/remote-jobs/cognitiveworks-ai-automation-architect</link>
+      <guid>https://weworkremotely.com/remote-jobs/cognitiveworks-ai-automation-architect</guid>
+      <description>Design and maintain agentic automation pipelines.</description>
+      <pubDate>Sun, 20 Sep 2026 08:00:00 +0000</pubDate>
+    </item>
+  </channel>
+</rss>

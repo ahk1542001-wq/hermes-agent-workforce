@@ -593,4 +593,83 @@ def parse_remotive_rss(xml_text: str, retrieved_at: datetime) -> list[RawFeedIte
     return items
 
 
+def parse_weworkremotely_rss(
+    xml_text: str, retrieved_at: datetime, preflight_approved: bool = False
+) -> list[RawFeedItem]:
+    """Parse We Work Remotely RSS XML into RawFeedItem list after preflight check."""
+    retrieved_at = _require_aware(retrieved_at)
+    if not preflight_approved:
+        raise SourceEnvelopeError(
+            "We Work Remotely RSS requires explicit preflight approval of terms, "
+            "schema, and rate behavior"
+        )
+    if not isinstance(xml_text, str) or not xml_text.strip():
+        raise SourceEnvelopeError("We Work Remotely RSS text must be non-empty")
+    try:
+        root = ET.fromstring(xml_text.strip())
+    except ET.ParseError as exc:
+        raise SourceEnvelopeError("We Work Remotely RSS XML is malformed") from exc
+
+    channel = root.find("channel")
+    if channel is None:
+        raise SourceEnvelopeError("We Work Remotely RSS missing channel element")
+
+    items: list[RawFeedItem] = []
+    for item_elem in channel.findall("item"):
+        title_elem = item_elem.find("title")
+        link_elem = item_elem.find("link")
+        if title_elem is None or not title_elem.text or link_elem is None or not link_elem.text:
+            raise SourceEnvelopeError("We Work Remotely RSS item missing title or link")
+
+        raw_title = _clean_text(title_elem.text)
+        if ": " in raw_title:
+            company, position = raw_title.split(": ", 1)
+        else:
+            company, position = "Unknown", raw_title
+
+        guid_elem = item_elem.find("guid")
+        item_id = (
+            _clean_text(guid_elem.text)
+            if guid_elem is not None and guid_elem.text
+            else _clean_text(link_elem.text)
+        )
+
+        desc_elem = item_elem.find("description")
+        desc = _clean_text(desc_elem.text) if desc_elem is not None and desc_elem.text else ""
+
+        pubdate_elem = item_elem.find("pubDate")
+        published_at = (
+            _parse_published_timestamp(pubdate_elem.text)
+            if pubdate_elem is not None
+            else None
+        )
+
+        item_url = canonicalize_url(link_elem.text)
+
+        try:
+            items.append(
+                RawFeedItem(
+                    source_name="weworkremotely",
+                    source_item_id=item_id,
+                    title=_clean_text(position),
+                    company=_clean_text(company),
+                    url=HttpUrl(item_url),
+                    apply_url=None,
+                    description=desc,
+                    location="Worldwide",
+                    published_at=published_at,
+                    retrieved_at=retrieved_at,
+                    is_delayed=False,
+                    authority=SourceAuthority.DISCOVERY_HINT,
+                )
+            )
+        except (TypeError, ValueError, ValidationError) as exc:
+            raise SourceEnvelopeError("We Work Remotely RSS item failed validation") from exc
+
+    if not items:
+        raise SourceEnvelopeError("We Work Remotely RSS contains no items")
+    return items
+
+
+
 
