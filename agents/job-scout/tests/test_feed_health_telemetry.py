@@ -155,6 +155,32 @@ def test_format_run_summary_full_coverage_no_sources() -> None:
     assert "Failed sources: None" in summary
 
 
+def test_discovery_run_coverage_must_match_failures() -> None:
+    with pytest.raises(ValidationError, match="partial coverage"):
+        DiscoveryRun(
+            run_id="run-inconsistent-full",
+            started_at=NOW,
+            completed_at=LATER,
+            coverage="full",
+            checked_source_ids=["himalayas", "remotive"],
+            failed_source_ids=["remotive"],
+            changed_count=0,
+            provider="structured_feed_runner",
+        )
+
+    omitted_source_run = DiscoveryRun(
+        run_id="run-partial-omitted-source",
+        started_at=NOW,
+        completed_at=LATER,
+        coverage="partial",
+        checked_source_ids=["himalayas"],
+        failed_source_ids=[],
+        changed_count=0,
+        provider="structured_feed_runner",
+    )
+    assert omitted_source_run.coverage == "partial"
+
+
 def test_discovery_run_rejects_positive_model_calls() -> None:
     with pytest.raises(ValidationError, match="less than or equal to 0"):
         DiscoveryRun(

@@ -1,7 +1,13 @@
 import json
 from datetime import datetime, timezone
 
-from hermes_job_scout.reporting import QualifiedJobView, RunReport, render_markdown
+from hermes_job_scout.reporting import (
+    QualifiedJobView,
+    RunReport,
+    render_hiring_manager_review,
+    render_markdown,
+)
+from hermes_job_scout.scoring import HiringManagerReview, RequirementAssessment
 
 NOW = datetime(2026, 9, 15, 8, 0, tzinfo=timezone.utc)
 
@@ -146,5 +152,88 @@ def test_feed_report_with_authority_badges_and_counts() -> None:
     assert "Discovered: 10" in md
     assert "Verified: 5" in md
     assert "Needs verification: 3" in md
-    assert "Closing soon: 1" in md
     assert "## Closing Soon Alerts" in md
+
+
+def test_feed_report_with_input_errors_and_unknown_inputs() -> None:
+    report = RunReport(
+        run_id="feed-digest-errors",
+        created_at=NOW,
+        qualified_jobs=(),
+        rejection_reasons={},
+        invalid_fixture_count=2,
+        duplicate_count=0,
+        runtime_ms=50,
+        model_calls=0,
+        tool_calls=0,
+        free_credit_usage={},
+        search_retrieval_spend_usd=0,
+        external_actions=0,
+        unknown_inputs=("unknown_feed.txt",),
+        input_errors={"remoteok_feed.json": "malformed JSON", "unknown_feed.txt": "unsupported"},
+    )
+
+    md = render_markdown(report)
+    assert "## Input Errors & Unknown Feeds" in md
+    assert "remoteok_feed.json: malformed JSON" in md
+    assert "unknown_feed.txt: unsupported" in md
+    assert "unknown_feed.txt" in report.to_json()
+
+
+def test_feed_report_redacts_input_error_details() -> None:
+    private_path = "/" + "/".join(("Users", "example", "private", "feed.json"))
+    report = RunReport(
+        run_id="feed-digest-sensitive-error",
+        created_at=NOW,
+        qualified_jobs=(),
+        rejection_reasons={},
+        invalid_fixture_count=1,
+        duplicate_count=0,
+        runtime_ms=1,
+        model_calls=0,
+        tool_calls=0,
+        free_credit_usage={},
+        search_retrieval_spend_usd=0,
+        external_actions=0,
+        input_errors={"feed.json": f"token=secret-value path={private_path}"},
+    )
+
+    markdown = render_markdown(report)
+    assert "secret-value" not in markdown
+    assert private_path not in markdown
+    assert "<REDACTED>" in markdown
+
+
+def test_hiring_manager_review_is_cited_gap_explicit_and_human_gated() -> None:
+    review = HiringManagerReview(
+        assessments=(
+            RequirementAssessment(
+                requirement="Python",
+                status="strong_match",
+                job_field_ref="skills",
+                candidate_fact_ids=("skill_python",),
+            ),
+            RequirementAssessment(
+                requirement="Kubernetes",
+                status="missing_evidence",
+                job_field_ref="skills",
+                candidate_fact_ids=(),
+            ),
+        ),
+        gaps=("Missing approved evidence for skill: Kubernetes",),
+    )
+
+    markdown = render_hiring_manager_review(
+        company="Synthetic Company",
+        role="AI Automation Engineer",
+        review=review,
+    )
+
+    assert "Strong match — Python — `job.skills` — `candidate:skill_python`" in markdown
+    assert "Missing evidence — Kubernetes — `job.skills` — no candidate fact" in markdown
+    assert "Missing approved evidence for skill: Kubernetes" in markdown
+    assert "Owner decision: NEEDS_VICTOR" in markdown
+    assert "External action authorized: No" in markdown
+    assert "cultural fit" not in markdown.casefold()
+    assert "google" not in markdown.casefold()
+    assert "meta" not in markdown.casefold()

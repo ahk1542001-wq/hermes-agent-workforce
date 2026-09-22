@@ -257,3 +257,19 @@ def test_ambiguity_mutations_have_explicit_outcomes(
     result = evaluate_hard_filters(job, _policy(), NOW)
     assert result.decision is expected_decision
     assert result.reason_codes[0] == expected_reason
+
+
+def test_unknown_freshness_is_needs_victor() -> None:
+    job = _job(posted_at=None, uncertainty_flags=["FRESHNESS_UNKNOWN"])
+    result = evaluate_hard_filters(job, _policy(), NOW)
+    assert result.decision is Decision.NEEDS_VICTOR
+    assert "FRESHNESS_UNKNOWN" in result.reason_codes
+    assert "FRESHNESS_UNKNOWN" in result.uncertainty_flags
+
+
+def test_unknown_work_type_is_needs_victor() -> None:
+    job = _job(work_type=None, uncertainty_flags=["WORK_TYPE_UNKNOWN"])
+    result = evaluate_hard_filters(job, _policy(), NOW)
+    assert result.decision is Decision.NEEDS_VICTOR
+    assert "WORK_TYPE_UNKNOWN" in result.reason_codes
+    assert "WORK_TYPE_UNKNOWN" in result.uncertainty_flags

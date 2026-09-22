@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import json
 from collections.abc import Sequence
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from typing import cast
 
 from .models import DiscoveryRun, SourceRecord
 from .redaction import redact_data, redact_text
+from .scoring import HiringManagerReview
 
 
 @dataclass(frozen=True)
@@ -41,6 +42,8 @@ class RunReport:
     verified_count: int = 0
     needs_verification_count: int = 0
     closing_soon_count: int = 0
+    unknown_inputs: tuple[str, ...] = ()
+    input_errors: dict[str, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if self.created_at.tzinfo is None or self.created_at.utcoffset() is None:
@@ -103,6 +106,22 @@ def render_markdown(report: RunReport) -> str:
             "",
         ]
 
+    input_alerts: list[str] = []
+    if report.input_errors or report.unknown_inputs:
+        alert_lines = []
+        if report.input_errors:
+            for name, err in sorted(report.input_errors.items()):
+                alert_lines.append(f"- {redact_text(name)}: {redact_text(err)}")
+        elif report.unknown_inputs:
+            for name in report.unknown_inputs:
+                alert_lines.append(f"- {redact_text(name)}")
+        input_alerts = [
+            "## Input Errors & Unknown Feeds",
+            "",
+            *alert_lines,
+            "",
+        ]
+
     lines = [
         "# Synthetic Job Scout Run Report",
         "",
@@ -118,6 +137,7 @@ def render_markdown(report: RunReport) -> str:
         f"Search/retrieval spend USD: {report.search_retrieval_spend_usd:.2f}",
         "",
         *closing_alerts,
+        *input_alerts,
         "## Top 15",
         "",
         *rows(report.top),
@@ -134,6 +154,53 @@ def render_markdown(report: RunReport) -> str:
         "",
     ]
     return "\n".join(lines)
+
+
+def render_hiring_manager_review(
+    *,
+    company: str,
+    role: str,
+    review: HiringManagerReview,
+) -> str:
+    """Render cited requirement QA without pretending to be a hiring authority."""
+
+    status_labels = {
+        "strong_match": "Strong match",
+        "partial_match": "Partial match",
+        "missing_evidence": "Missing evidence",
+    }
+    assessment_lines: list[str] = []
+    for item in review.assessments:
+        label = status_labels.get(item.status, "Needs review")
+        citations = (
+            ", ".join(f"`candidate:{fact_id}`" for fact_id in item.candidate_fact_ids)
+            if item.candidate_fact_ids
+            else "no candidate fact"
+        )
+        assessment_lines.append(
+            f"- {label} — {redact_text(item.requirement)} — "
+            f"`job.{item.job_field_ref}` — {citations}"
+        )
+    gap_lines = [f"- {redact_text(gap)}" for gap in review.gaps] or ["- None"]
+    return "\n".join(
+        [
+            "# Job Requirement Evidence Review",
+            "",
+            f"Role: {redact_text(role)}",
+            f"Company: {redact_text(company)}",
+            f"Owner decision: {review.owner_decision.value.upper()}",
+            "External action authorized: No",
+            "",
+            "## Requirement Mapping",
+            "",
+            *assessment_lines,
+            "",
+            "## Evidence Gaps",
+            "",
+            *gap_lines,
+            "",
+        ]
+    )
 
 
 def format_run_summary(run: DiscoveryRun, sources: Sequence[SourceRecord] = ()) -> str:
@@ -166,4 +233,10 @@ def format_run_summary(run: DiscoveryRun, sources: Sequence[SourceRecord] = ()) 
     return "\n".join(lines)
 
 
-__all__ = ["QualifiedJobView", "RunReport", "format_run_summary", "render_markdown"]
+__all__ = [
+    "QualifiedJobView",
+    "RunReport",
+    "format_run_summary",
+    "render_hiring_manager_review",
+    "render_markdown",
+]

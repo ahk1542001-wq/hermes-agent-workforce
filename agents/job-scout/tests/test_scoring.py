@@ -18,6 +18,7 @@ from hermes_job_scout.models import (
 from hermes_job_scout.scoring import (
     DEFAULT_WEIGHTS,
     ReasoningResult,
+    review_job_requirements,
     score_job,
 )
 
@@ -128,6 +129,54 @@ def test_known_mismatch_counts_as_zero_not_unknown() -> None:
     assert score.total_score == 70
     assert score.evidence_coverage == 100
     assert score.provisional is False
+
+
+def test_approved_long_form_skill_supports_specific_job_keyword() -> None:
+    profile = _profile().model_copy(
+        update={
+            "skills": ["Python and FastAPI application development"],
+            "facts": [
+                *_profile().facts,
+                CandidateFact(
+                    fact_id="skill_python_fastapi",
+                    category="skill",
+                    allowed_wording="Python and FastAPI application development",
+                    source="synthetic fixture",
+                    verified=True,
+                ),
+            ],
+        }
+    )
+
+    score = score_job(_job(skills=["Python"]), profile, "policy-v1")
+
+    assert score.component_evidence["skill_task_fit"] == 100
+
+
+def test_hiring_review_maps_each_requirement_to_evidence_or_gap() -> None:
+    review = review_job_requirements(
+        _job(skills=["Python", "Kubernetes"], language=["English"]),
+        _profile(),
+    )
+
+    python = next(item for item in review.assessments if item.requirement == "Python")
+    kubernetes = next(item for item in review.assessments if item.requirement == "Kubernetes")
+    english = next(item for item in review.assessments if item.requirement == "English")
+    experience = next(item for item in review.assessments if item.job_field_ref == "experience")
+
+    assert python.status == "strong_match"
+    assert python.candidate_fact_ids == ("skill_python",)
+    assert kubernetes.status == "missing_evidence"
+    assert kubernetes.candidate_fact_ids == ()
+    assert english.status == "missing_evidence"
+    assert experience.status == "partial_match"
+    assert review.owner_decision is Decision.NEEDS_VICTOR
+    assert review.external_action_authorized is False
+    assert review.gaps == (
+        "Missing approved evidence for skill: Kubernetes",
+        "Missing approved evidence for language: English",
+        "Experience requirement needs human comparison: 0-3 years",
+    )
 
 
 def test_rejected_record_has_no_score() -> None:

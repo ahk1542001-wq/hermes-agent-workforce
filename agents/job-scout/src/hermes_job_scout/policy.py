@@ -163,7 +163,9 @@ def evaluate_hard_filters(
         return _reject("EXPIRED", work_auth)
     if (now - job.last_verified_at).days > policy.freshness_days:
         return _reject("STALE_LISTING", work_auth)
-    if job.work_type not in policy.allowed_work_types:
+    if job.posted_at is not None and (now - job.posted_at).days > policy.freshness_days:
+        return _reject("STALE_LISTING", work_auth)
+    if job.work_type is not None and job.work_type not in policy.allowed_work_types:
         return _reject("WORK_TYPE_NOT_ALLOWED", work_auth)
     if "unpaid" in f"{job.role} {job.experience}".casefold():
         return _reject("UNPAID_INTERNSHIP", work_auth)
@@ -179,6 +181,15 @@ def evaluate_hard_filters(
         return _reject("EXCLUDED_SENIORITY", work_auth)
     if not _role_matches(job, policy):
         return _reject("NON_AI_ROLE", work_auth)
+
+    uncertainty_reasons: list[str] = []
+    if "FRESHNESS_UNKNOWN" in job.uncertainty_flags:
+        uncertainty_reasons.append("FRESHNESS_UNKNOWN")
+    if job.work_type is None or "WORK_TYPE_UNKNOWN" in job.uncertainty_flags:
+        uncertainty_reasons.append("WORK_TYPE_UNKNOWN")
+    if "EXPERIENCE_UNKNOWN" in job.uncertainty_flags:
+        uncertainty_reasons.append("EXPERIENCE_UNKNOWN")
+
     experience_rejection, stretch = _experience_outcome(job, policy)
     if experience_rejection is not None:
         return _reject(experience_rejection, work_auth)
@@ -189,11 +200,14 @@ def evaluate_hard_filters(
     if not _geography_matches(job, policy):
         return _reject("GEOGRAPHY_UNSUPPORTED", work_auth)
     if work_auth is WorkAuthLabel.C_THAI_UNKNOWN:
+        uncertainty_reasons.append("WORK_AUTH_UNCONFIRMED")
+
+    if uncertainty_reasons:
         return PolicyDecision(
             decision=Decision.NEEDS_VICTOR,
-            reason_codes=("WORK_AUTH_UNCONFIRMED",),
+            reason_codes=tuple(uncertainty_reasons),
             work_auth_label=work_auth,
-            uncertainty_flags=("WORK_AUTH_UNCONFIRMED",),
+            uncertainty_flags=tuple(uncertainty_reasons),
         )
 
     reasons: list[str] = []

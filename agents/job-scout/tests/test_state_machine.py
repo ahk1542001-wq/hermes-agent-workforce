@@ -166,6 +166,22 @@ def test_untrusted_evidence_cannot_override_transition_audit_fields(tmp_path: Pa
     store.close()
 
 
+def test_unknown_eligibility_cannot_transition_to_qualified(tmp_path: Path) -> None:
+    paths = WorkspacePaths.from_root(tmp_path / "Career-unknown-eligibility")
+    bootstrap_private_workspace(paths)
+    store = JobStore.open(paths.database, paths.marker.read_text(encoding="utf-8"))
+    unknown = _job(JobState.VERIFIED).model_copy(
+        update={"work_type": None, "uncertainty_flags": ["WORK_TYPE_UNKNOWN"]}
+    )
+    store.upsert_job(unknown, expected_revision=0)
+
+    with pytest.raises(InvalidTransition, match="violates job invariants"):
+        transition("job-1", JobState.QUALIFIED, _context(store))
+
+    assert store.get_job("job-1").state is JobState.VERIFIED
+    store.close()
+
+
 @pytest.mark.parametrize(
     "authority", [SourceAuthority.DISCOVERY_HINT, SourceAuthority.NEEDS_VERIFICATION]
 )

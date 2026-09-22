@@ -9,9 +9,12 @@ from hermes_job_scout.models import (
     JobRecord,
     JobState,
     RawFeedItem,
+    SearchPolicy,
     SourceAuthority,
+    WorkType,
 )
 from hermes_job_scout.normalize import deduplicate, normalize_feed_item
+from hermes_job_scout.policy import evaluate_hard_filters
 from hermes_job_scout.sources import verify_feed_listing
 
 NOW = datetime(2026, 9, 20, 9, 0, tzinfo=timezone.utc)
@@ -76,6 +79,60 @@ def test_ats_company_mismatch_fails_closed() -> None:
     result = verify_feed_listing(hint, official_url="https://jobs.lever.co/othercorp/REQ-404")
     assert result.authority is SourceAuthority.DISCOVERY_HINT
     assert result.state is JobState.DISCOVERED
+
+
+def test_ats_company_substring_collision_fails_closed() -> None:
+    hint = _sample_hint()
+    result = verify_feed_listing(
+        hint,
+        official_url="https://jobs.lever.co/notacme/REQ-404",
+    )
+    assert result.authority is SourceAuthority.DISCOVERY_HINT
+    assert result.state is JobState.DISCOVERED
+
+
+@pytest.mark.parametrize(
+    ("company", "url", "authority"),
+    [
+        ("Acme Corp", "https://acme.bamboohr.com/careers/123", SourceAuthority.ATS),
+        ("Acme Corp", "https://acme.recruitee.com/o/engineer", SourceAuthority.ATS),
+        ("Example Corp", "https://careers.example.com/jobs/123", SourceAuthority.OFFICIAL),
+    ],
+)
+def test_supported_subdomain_authorities_still_match_company(
+    company: str,
+    url: str,
+    authority: SourceAuthority,
+) -> None:
+    hint = _sample_hint().model_copy(update={"company": company})
+    verified = verify_feed_listing(hint, official_url=url)
+    assert verified.authority is authority
+    assert verified.state is JobState.VERIFIED
+
+
+def test_workday_infrastructure_shard_cannot_match_company() -> None:
+    hint = _sample_hint().model_copy(update={"company": "WD5"})
+    result = verify_feed_listing(
+        hint,
+        official_url="https://other.wd5.myworkdayjobs.com/en-US/Careers/job/engineer/123",
+    )
+    assert result.authority is SourceAuthority.DISCOVERY_HINT
+    assert result.state is JobState.DISCOVERED
+
+
+def test_verified_listing_with_unknown_eligibility_stays_needs_victor() -> None:
+    verified = verify_feed_listing(_sample_hint())
+    policy = SearchPolicy(
+        policy_version="test-v1",
+        headline="AI Automation Engineer",
+        role_aliases=["AI Engineer"],
+        geography_priority=["Worldwide"],
+        allowed_work_types=[WorkType.FULL_TIME],
+        accepted_languages=["English"],
+    )
+    decision = evaluate_hard_filters(verified, policy, NOW)
+    assert decision.decision is Decision.NEEDS_VICTOR
+    assert "EXPERIENCE_UNKNOWN" in decision.uncertainty_flags
 
 
 def test_confirmed_employer_promotes_to_official_and_verified() -> None:

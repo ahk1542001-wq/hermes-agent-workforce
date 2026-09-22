@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Protocol
@@ -48,6 +49,26 @@ class ReasoningResult:
     skill_claims: tuple[str, ...] = ()
 
 
+@dataclass(frozen=True)
+class RequirementAssessment:
+    """One job requirement mapped only to approved candidate evidence."""
+
+    requirement: str
+    status: str
+    job_field_ref: str
+    candidate_fact_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class HiringManagerReview:
+    """Deterministic pre-application QA; it never authorizes an external action."""
+
+    assessments: tuple[RequirementAssessment, ...]
+    gaps: tuple[str, ...]
+    owner_decision: Decision = Decision.NEEDS_VICTOR
+    external_action_authorized: bool = False
+
+
 class FitReasoner(Protocol):
     """Optional explanation interface; deterministic scoring never depends on it."""
 
@@ -56,6 +77,73 @@ class FitReasoner(Protocol):
 
 def _normalized_set(values: list[str]) -> set[str]:
     return {" ".join(value.casefold().split()) for value in values}
+
+
+def _approved_fact_ids_for_claim(claim: str, profile: CandidateProfile) -> tuple[str, ...]:
+    normalized = " ".join(claim.casefold().split())
+    return tuple(
+        fact.fact_id
+        for fact in profile.facts
+        if fact.verified and " ".join(fact.allowed_wording.casefold().split()) == normalized
+    )
+
+
+def _skill_fact_ids(requirement: str, profile: CandidateProfile) -> tuple[str, ...]:
+    normalized_requirement = " ".join(requirement.casefold().split())
+    if not normalized_requirement:
+        return ()
+    pattern = re.compile(rf"(?<!\w){re.escape(normalized_requirement)}(?!\w)")
+    matches: list[str] = []
+    for claim in profile.skills:
+        normalized_claim = " ".join(claim.casefold().split())
+        if normalized_claim == normalized_requirement or pattern.search(normalized_claim):
+            matches.extend(_approved_fact_ids_for_claim(claim, profile))
+    return tuple(dict.fromkeys(matches))
+
+
+def review_job_requirements(
+    job: JobRecord,
+    profile: CandidateProfile,
+) -> HiringManagerReview:
+    """Map structured job requirements to approved facts and explicit gaps."""
+
+    assessments: list[RequirementAssessment] = []
+    gaps: list[str] = []
+    for skill in job.skills:
+        fact_ids = _skill_fact_ids(skill, profile)
+        status = "strong_match" if fact_ids else "missing_evidence"
+        assessments.append(RequirementAssessment(skill, status, "skills", fact_ids))
+        if not fact_ids:
+            gaps.append(f"Missing approved evidence for skill: {skill}")
+
+    language_claims = {
+        language.casefold(): f"{language}: {level}" for language, level in profile.languages.items()
+    }
+    for language in job.language:
+        claim = language_claims.get(language.casefold())
+        fact_ids = _approved_fact_ids_for_claim(claim, profile) if claim else ()
+        status = "strong_match" if fact_ids else "missing_evidence"
+        assessments.append(RequirementAssessment(language, status, "language", fact_ids))
+        if not fact_ids:
+            gaps.append(f"Missing approved evidence for language: {language}")
+
+    experience_fact_ids = tuple(
+        fact_id
+        for claim in profile.experience
+        for fact_id in _approved_fact_ids_for_claim(claim, profile)
+    )
+    experience_status = "partial_match" if experience_fact_ids else "missing_evidence"
+    assessments.append(
+        RequirementAssessment(
+            job.experience,
+            experience_status,
+            "experience",
+            tuple(dict.fromkeys(experience_fact_ids)),
+        )
+    )
+    gaps.append(f"Experience requirement needs human comparison: {job.experience}")
+
+    return HiringManagerReview(tuple(assessments), tuple(gaps))
 
 
 def _validate_weights(weights: Mapping[str, int]) -> dict[str, int]:
@@ -92,11 +180,9 @@ def _validate_reasoning(
 
 
 def _component_scores(job: JobRecord, profile: CandidateProfile) -> dict[str, float | None]:
-    job_skills = _normalized_set(job.skills)
-    profile_skills = _normalized_set(profile.skills)
     skill_score: float | None
-    if job_skills and profile_skills:
-        skill_score = 100.0 if job_skills & profile_skills else 0.0
+    if job.skills and profile.skills:
+        skill_score = 100.0 if any(_skill_fact_ids(skill, profile) for skill in job.skills) else 0.0
     else:
         skill_score = None
 
@@ -182,4 +268,12 @@ def score_job(
     )
 
 
-__all__ = ["DEFAULT_WEIGHTS", "FitReasoner", "ReasoningResult", "score_job"]
+__all__ = [
+    "DEFAULT_WEIGHTS",
+    "FitReasoner",
+    "HiringManagerReview",
+    "ReasoningResult",
+    "RequirementAssessment",
+    "review_job_requirements",
+    "score_job",
+]

@@ -228,7 +228,7 @@ class DiscoveryRun(StrictModel):
     started_at: datetime
     completed_at: datetime
     coverage: str
-    checked_source_ids: list[str] = Field(min_length=1)
+    checked_source_ids: list[str] = Field(default_factory=list)
     failed_source_ids: list[str] = Field(default_factory=list)
     changed_count: int = Field(ge=0)
     result_count: int = Field(default=0, ge=0)
@@ -271,6 +271,8 @@ class DiscoveryRun(StrictModel):
     def _failed_sources_were_checked(self) -> DiscoveryRun:
         if not set(self.failed_source_ids).issubset(self.checked_source_ids):
             raise ValueError("failed source IDs must be a subset of checked source IDs")
+        if self.failed_source_ids and self.coverage != "partial":
+            raise ValueError("failed sources require partial coverage")
         if self.completed_at < self.started_at:
             raise ValueError("completion cannot precede start")
         return self
@@ -309,7 +311,7 @@ class JobRecord(StrictModel):
     last_verified_at: datetime
     posted_at: datetime | None = None
     closes_at: datetime | None = None
-    work_type: WorkType
+    work_type: WorkType | None = None
     location: str = Field(min_length=1, max_length=200)
     remote_region: str = Field(min_length=1, max_length=120)
     experience: str = Field(min_length=1, max_length=500)
@@ -355,6 +357,17 @@ class JobRecord(StrictModel):
             self.state in verified_states or self.owner_decision is Decision.QUALIFIED
         ):
             raise ValueError("unverified source authority cannot become verified or qualified")
+        qualification_states = verified_states - {JobState.VERIFIED}
+        blocking_uncertainty = {
+            "FRESHNESS_UNKNOWN",
+            "WORK_TYPE_UNKNOWN",
+            "WORK_TYPE_CONFLICT",
+            "EXPERIENCE_UNKNOWN",
+        }
+        if self.state in qualification_states and (
+            self.work_type is None or blocking_uncertainty.intersection(self.uncertainty_flags)
+        ):
+            raise ValueError("unknown eligibility cannot become qualified")
         return self
 
 

@@ -320,6 +320,16 @@ def parse_himalayas_feed(payload: Mapping[str, Any], retrieved_at: datetime) -> 
         desc = _clean_text(str(item.get("description") or item.get("excerpt") or ""))
         published_at = _parse_published_timestamp(item.get("pubDate"))
 
+        metadata: dict[str, str] = {}
+        wt = (
+            item.get("employmentType")
+            or item.get("employment_type")
+            or item.get("workType")
+            or item.get("work_type")
+        )
+        if wt and isinstance(wt, str) and wt.strip():
+            metadata["work_type"] = _clean_text(wt)
+
         try:
             items.append(
                 RawFeedItem(
@@ -335,6 +345,7 @@ def parse_himalayas_feed(payload: Mapping[str, Any], retrieved_at: datetime) -> 
                     retrieved_at=retrieved_at,
                     is_delayed=False,
                     authority=SourceAuthority.DISCOVERY_HINT,
+                    metadata=metadata,
                 )
             )
         except (TypeError, ValueError, ValidationError) as exc:
@@ -376,6 +387,23 @@ def parse_remoteok_json(payload: Sequence[Any], retrieved_at: datetime) -> list[
         desc = _clean_text(str(raw.get("description") or ""))
         published_at = _parse_published_timestamp(raw.get("epoch") or raw.get("date"))
 
+        metadata: dict[str, str] = {}
+        wt = raw.get("job_type") or raw.get("work_type") or raw.get("employment_type")
+        if wt and isinstance(wt, str) and wt.strip():
+            metadata["work_type"] = _clean_text(wt)
+        elif "tags" in raw and isinstance(raw["tags"], list):
+            for t in raw["tags"]:
+                if isinstance(t, str) and t.lower() in (
+                    "full-time",
+                    "full_time",
+                    "full time",
+                    "contract",
+                    "freelance",
+                    "internship",
+                ):
+                    metadata["work_type"] = _clean_text(t)
+                    break
+
         try:
             items.append(
                 RawFeedItem(
@@ -391,6 +419,7 @@ def parse_remoteok_json(payload: Sequence[Any], retrieved_at: datetime) -> list[
                     retrieved_at=retrieved_at,
                     is_delayed=False,
                     authority=SourceAuthority.DISCOVERY_HINT,
+                    metadata=metadata,
                 )
             )
         except (TypeError, ValueError, ValidationError) as exc:
@@ -692,14 +721,38 @@ _GENERIC_COMPANY_SUFFIXES = {
 
 def _matches_company(candidate_url: str, company: str) -> bool:
     tokens = [t for t in re.split(r"[^a-z0-9]+", company.lower()) if t]
-    significant = [t for t in tokens if t not in _GENERIC_COMPANY_SUFFIXES]
-    check_tokens = significant if significant else tokens
-    if not check_tokens:
-        return True
+    if not tokens:
+        return False
+    aliases = {"-".join(tokens), "".join(tokens)}
+    trimmed = list(tokens)
+    while len(trimmed) > 1 and trimmed[-1] in _GENERIC_COMPANY_SUFFIXES:
+        trimmed.pop()
+        aliases.update({"-".join(trimmed), "".join(trimmed)})
+    significant = [token for token in tokens if token not in _GENERIC_COMPANY_SUFFIXES]
+    if significant:
+        aliases.update({"-".join(significant), "".join(significant)})
     parts = urlsplit(candidate_url.lower())
     host = parts.hostname or ""
-    path = parts.path
-    return any(tok in host or tok in path for tok in check_tokens)
+    path_parts = [part for part in parts.path.split("/") if part]
+    candidate_identifiers: set[str] = set()
+    if host in {"boards.greenhouse.io", "jobs.lever.co", "jobs.ashbyhq.com"} and path_parts:
+        candidate_identifiers.add(path_parts[0])
+    elif host in {"jobs.smartrecruiters.com", "boards.jobvite.com"} and path_parts:
+        candidate_identifiers.add(path_parts[0])
+    else:
+        for domain in _ATS_JOB_PATHS:
+            if _host_matches(host, domain):
+                prefix = host.removesuffix(domain).rstrip(".")
+                if prefix:
+                    candidate_identifiers.add(prefix.split(".", 1)[0])
+        for domain in _VERIFIED_EMPLOYER_JOB_PATHS:
+            if _host_matches(host, domain):
+                candidate_identifiers.add(domain.split(".", 1)[0])
+    normalized_identifiers = {
+        re.sub(r"[^a-z0-9]", "", identifier) for identifier in candidate_identifiers
+    }
+    normalized_aliases = {re.sub(r"[^a-z0-9]", "", alias) for alias in aliases}
+    return bool(normalized_identifiers & normalized_aliases)
 
 
 def verify_feed_listing(
