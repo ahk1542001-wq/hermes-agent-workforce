@@ -4,6 +4,7 @@ import json
 import socket
 from pathlib import Path
 
+from typer.main import get_command
 from typer.testing import CliRunner
 
 from hermes_job_scout.cli import app
@@ -524,9 +525,9 @@ def test_pilot_feed_discovery_invalid_now_timestamp(tmp_path: Path) -> None:
             "not-a-valid-date",
         ],
     )
-    assert result.exit_code != 0
-    assert "invalid --now timestamp" in result.output
+    assert result.exit_code == 2
     assert not (tmp_path / "workspace").exists()
+    assert not (tmp_path / "report.json").exists()
 
 
 def test_pilot_feed_discovery_rejects_naive_now_timestamp(tmp_path: Path) -> None:
@@ -633,8 +634,16 @@ def test_pilot_feed_discovery_requires_workspace(tmp_path: Path) -> None:
             str(tmp_path / "report.json"),
         ],
     )
-    assert result.exit_code != 0
-    assert "--workspace" in result.output
+    assert result.exit_code == 2
+    assert not (tmp_path / "report.json").exists()
+
+
+def test_pilot_feed_discovery_command_schema_requires_workspace_and_rejects_db() -> None:
+    command = get_command(app).commands["pilot-feed-discovery"]
+    params = {param.name: param for param in command.params}
+
+    assert params["workspace"].required is True
+    assert "db" not in params
 
 
 def test_pilot_feed_discovery_rejects_legacy_db_copy_mode(tmp_path: Path) -> None:
@@ -655,7 +664,7 @@ def test_pilot_feed_discovery_rejects_legacy_db_copy_mode(tmp_path: Path) -> Non
         ],
     )
 
-    assert result.exit_code != 0
-    assert "--db" in result.output
+    assert result.exit_code == 2
     assert not legacy_db.exists()
+    assert not (tmp_path / "report.json").exists()
     assert not (tmp_path / "workspace_pilot").exists()
