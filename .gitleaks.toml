@@ -5,6 +5,7 @@ useDefault = true
 
 [[allowlists]]
 description = "Exact synthetic fixtures and example domains only"
+regexTarget = "line"
 regexes = [
   '''https://(?:careers\.)?example\.com/''',
   '''sk-test-12345678901234567890''',
