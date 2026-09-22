@@ -3,7 +3,9 @@ title = "Hermes Agent Workforce public-boundary scan"
 [extend]
 useDefault = true
 
-[[allowlists]]
+# gitleaks-action@v2 currently resolves Gitleaks 8.24.x; the singular table
+# remains backward-compatible across Gitleaks v8.
+[allowlist]
 description = "Exact synthetic fixtures and example domains only"
 regexTarget = "line"
 regexes = [
