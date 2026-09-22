@@ -4,5 +4,9 @@ title = "Hermes Agent Workforce public-boundary scan"
 useDefault = true
 
 [[allowlists]]
-description = "Synthetic example domains only"
-regexes = ['''https://(?:careers\.)?example\.com/''']
+description = "Exact synthetic fixtures and example domains only"
+regexes = [
+  '''https://(?:careers\.)?example\.com/''',
+  '''sk-test-12345678901234567890''',
+  '''abc123456789xyz''',
+]
