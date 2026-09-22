@@ -107,6 +107,21 @@ def test_public_docs_ci_and_mock_only_contract_exist() -> None:
     assert "mock-only" in docs
 
 
+def test_public_docs_describe_the_current_stage3_local_pilot() -> None:
+    current_docs = {
+        path: (ROOT / path).read_text(encoding="utf-8")
+        for path in (
+            "README.md",
+            "agents/job-scout/README.md",
+            "docs/ARCHITECTURE.md",
+            "docs/PERMISSION_MODEL.md",
+        )
+    }
+    assert all("Stage 3" in text for text in current_docs.values())
+    assert "pilot-feed-discovery" in current_docs["README.md"]
+    assert "local feed snapshots" in current_docs["docs/ARCHITECTURE.md"]
+
+
 def test_private_path_fails_public_boundary(tmp_path: Path) -> None:
     scanner = _load_script("verify_public_boundary")
     (tmp_path / "README.md").write_text(

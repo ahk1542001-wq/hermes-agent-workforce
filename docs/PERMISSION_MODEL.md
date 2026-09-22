@@ -6,5 +6,6 @@
 - Level 3: identity, legal, account, CAPTCHA, assessment, negotiation, and acceptance
   remain owner-only.
 
-Stage 2 is **mock-only**. It has no live transport, scheduler, Telegram integration,
-browser session, provider credential, or blanket apply authority. Uncertainty fails closed.
+Stage 3 remains **mock-only** for external actions. Local feed-snapshot import does not
+authorize network retrieval, live transport, scheduler, Telegram integration, browser
+session, provider credential, or blanket apply authority. Uncertainty fails closed.

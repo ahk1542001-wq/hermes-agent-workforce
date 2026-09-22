@@ -11,9 +11,10 @@
   provisional scoring, pursuit/interview/debrief, tracker recovery, loopback security,
   release allowlist, and privacy-scan concepts informed the design. No source,
   instructions, JSON state model, or Node runtime was copied.
-- Hermes later consumes stable `web_search`/`web_extract` envelopes. Stage 3 may test
-  Tavily search and bounded Firecrawl fallback; Stage 2 adds no vendor SDK or key.
-- Vertex AI is a later optional model provider, not search, and is unused in Stage 2.
+- Hermes later consumes stable `web_search`/`web_extract` envelopes. The current Stage 3
+  pilot imports local feed snapshots and adds no Tavily/Firecrawl SDK or key; any live
+  search and bounded extraction test remains a separate approval gate.
+- Vertex AI is a later optional model provider, not search, and is unused in Stage 3.
 - Hermes baseline observed was 0.21.0; latest observed was 0.21.3. Updating is excluded
   and needs a separate Stage 4 security/backup/rollback review.
 - Current Hermes search and extract selection was unavailable Exa. Stage 3 must explicitly
