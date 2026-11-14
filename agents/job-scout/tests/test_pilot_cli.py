@@ -103,6 +103,9 @@ def test_pilot_feed_discovery_cli_e2e(tmp_path: Path, monkeypatch) -> None:
             str(workspace_dir),
             "--report",
             str(report_path),
+            # Bind the dated fixture to a fixed clock rather than CI's current day.
+            "--now",
+            "2026-09-16T08:00:00Z",
         ],
     )
 
