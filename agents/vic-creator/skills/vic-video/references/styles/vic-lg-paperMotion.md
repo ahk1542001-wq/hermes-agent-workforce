@@ -10,7 +10,7 @@ Preserve the genuine VIC atlases/identity under the studio's owned `assets/vic-m
 
 ## Shared voice, measured timing
 
-Use the main entry's canonical shared Voice procedure and approved reference, chunking, pronunciation and Colab recipe. Do not load the old Codex skill's synthesis/assembly stages, run its job-specific voice drivers, force every phrase under4s/14–16syllables, delete natural pauses or treat pure-voice examples as a universal soundtrack rule. Existing film audio remains unchanged; a future explicit voice-only brief is honoured. Background treatment follows the current brief, with voice always clear.
+Use the main entry's canonical shared Voice procedure and approved reference, chunking, pronunciation and Colab recipe. Do not load the legacy local skill's synthesis/assembly stages, run its job-specific voice drivers, force every phrase under4s/14–16syllables, delete natural pauses or treat pure-voice examples as a universal soundtrack rule. Existing film audio remains unchanged; a future explicit voice-only brief is honoured. Background treatment follows the current brief, with voice always clear.
 
 After verified assembly, [paper_timing.py](../../scripts/paper_timing.py) converts the shared receipt plus its exact WAV into the engine timing schema. It verifies the WAV hash/format, IDs and sample intervals. Give it explicit chapter groups; it never changes audio or generates speech. Its scene intervals include inter-chunk pauses and final tail and cover the complete waveform. Do not compute era duration from last-word-end minus first-word-start when that drops a pause.
 

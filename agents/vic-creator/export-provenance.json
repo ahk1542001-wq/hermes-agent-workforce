@@ -195,9 +195,9 @@
     },
     {
       "path": "agents/vic-creator/skills/vic-video/references/styles/vic-lg-paperMotion.md",
-      "sha256": "baccb84f2acec51848a1c297fd41da6a8a2e2f67f59e5df24bb7f5d170f109e6",
+      "sha256": "c2f8eb69f5b97f8c6e9fbd3ea0c9d1770966d9cb039c9a31c41b8e54adceb3f6",
       "source_sha256": "4d584ca69809633977bbac605bf0313129e43698f8ebf03ea7163113154934d5",
-      "adaptation": "Public paths generalized; runtime executable portability changes documented separately."
+      "adaptation": "Public paths generalized and legacy external-tool references made neutral; provenance requirements retained."
     },
     {
       "path": "agents/vic-creator/skills/vic-video/references/styles/vic-sh-uiMotion.md",
@@ -213,9 +213,9 @@
     },
     {
       "path": "agents/vic-creator/skills/vic-video/references/styles/vic-sh-visualStory.md",
-      "sha256": "b6ac3b17b34bcdeef4c729467e362d8d960fe81ea77bd5c1fe547a12445e70f6",
+      "sha256": "c4c00c8f1b60c1e32eb577ecf208afcb0099d776bf86ff8c41fec7642e38be40",
       "source_sha256": "b6ac3b17b34bcdeef4c729467e362d8d960fe81ea77bd5c1fe547a12445e70f6",
-      "adaptation": "Public paths generalized; runtime executable portability changes documented separately."
+      "adaptation": "Public paths generalized and legacy external-tool references made neutral; provenance requirements retained."
     },
     {
       "path": "agents/vic-creator/skills/vic-video/references/styles/vic-lg-cartoonStory.md",
