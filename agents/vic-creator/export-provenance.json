@@ -3,9 +3,9 @@
   "files": [
     {
       "path": "agents/vic-creator/skills/vic-video/SKILL.md",
-      "sha256": "64161b8d28c6c44ce3b8cd57a6edfffd63b8eaf4ff1884e4b7ab64df55c8685c",
+      "sha256": "9df24bcf51501907085dc5057a0b31804b0dea7356a381be8b543e0224c2e179",
       "source_sha256": "786cb3624efa044c6b953081cc82c7f2282fb86f813ef40d9b2a703c48521bd3",
-      "adaptation": "Public paths generalized; runtime executable portability changes documented separately."
+      "adaptation": "Public paths generalized; obsolete profile catalog mention removed for the video-only release."
     },
     {
       "path": "agents/vic-creator/skills/vic-video/references/script-long.md",

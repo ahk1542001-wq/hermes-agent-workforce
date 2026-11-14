@@ -1,21 +1,11 @@
-# Upstream Decisions
+# Upstream runtime boundaries
 
-- `MadsLorentzen/ai-job-search` v1.7.1, MIT: reference-only; no code copied.
-- Agent-Reach: deferred and not installed; web/RSS reconsideration needs a separate review.
-- LinkedIn-AI-Job-Applier-Ultimate: rejected as a runtime/dependency because stealth,
-  bypass, auto-submit, session, privacy, and exact-approval behavior conflict here.
-- Scrapling: deferred and not installed; only a separately pinned parser review is possible;
-  stealth, proxy, browser fingerprinting, MCP, and anti-bot paths remain excluded.
-- Career-Agent 0.2.0 at `dd7f0a8c7dd5f893ad729231aa1afb5cee58033e`, MIT:
-  reference-only. Private-root, symlink, lock/revision, atomic-write, source-health,
-  provisional scoring, pursuit/interview/debrief, tracker recovery, loopback security,
-  release allowlist, and privacy-scan concepts informed the design. No source,
-  instructions, JSON state model, or Node runtime was copied.
-- Hermes later consumes stable `web_search`/`web_extract` envelopes. The current Stage 3
-  pilot imports local feed snapshots and adds no Tavily/Firecrawl SDK or key; any live
-  search and bounded extraction test remains a separate approval gate.
-- Vertex AI is a later optional model provider, not search, and is unused in Stage 3.
-- Hermes baseline observed was 0.21.0; latest observed was 0.21.3. Updating is excluded
-  and needs a separate Stage 4 security/backup/rollback review.
-- Current Hermes search and extract selection was unavailable Exa. Stage 3 must explicitly
-  verify a provider pair; this stage changes no credential or Hermes configuration.
+This source release includes VIC-authored workflow instructions, rendering/adaptation helpers and the shared Voice driver. It does not install or execute external repositories.
+
+- Hermes: separately installed agent host, tools and native worker configuration.
+- VoxCPM2: external reference-conditioned speech model; model weights not redistributed.
+- AniDoodle: external cartoon runtime, Apache-2.0; upstream license retained with exported extensions.
+- Huashu Art Motion: external paper/Canvas engine, with separate artwork/font restrictions.
+- KAPE design/helpers, HyperFrames and GSAP: spatial-style prerequisites; no third-party mascot is bundled as VIC identity.
+
+Review exact upstream revisions, dependencies, licenses, network behavior and asset rights before installation. Do not assume latest upstream HEAD matches historical owner films. See [runtime map](../agents/vic-creator/skills/vic-video/references/runtime-map.md) and [attribution](VIDEO_ATTRIBUTION.md).

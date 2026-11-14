@@ -12,6 +12,14 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 env = dict(os.environ, PYTHONDONTWRITEBYTECODE='1')
+# Preserve the release's public commit-identity boundary.
+identities = subprocess.run(['git', 'log', '--format=%ae%x00%ce'], cwd=ROOT,
+                            capture_output=True, text=True, check=True).stdout
+for line in identities.splitlines():
+    author, committer = line.lower().split('\0')
+    assert author.endswith(('@users.noreply.github.com', '@example.com'))
+    assert committer.split('@') == ['noreply', 'github.com'] or committer.endswith(
+        ('@users.noreply.github.com', '@example.com'))
 def run(*args):
     subprocess.run([sys.executable, '-B', *args], cwd=ROOT, env=env, check=True)
 

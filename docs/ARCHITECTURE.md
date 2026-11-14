@@ -1,12 +1,9 @@
-# Architecture
+# Video production architecture
 
-The Stage 3 local pilot has four planes: a sanitized AI OS for goals and policy,
-this public monorepo for reusable code and synthetic tests, a private local workspace for
-candidate/application data, and a later isolated Hermes runtime. SQLite is operational
-authority. Hermes memory, reports, and generated scores are not canonical facts.
+This public repository contains two Hermes profile packages: [VIC Creator](../agents/vic-creator/README.md) and [VIC Voice](../agents/vic-voice/README.md).
 
-The implemented flow is synthetic fixtures or local feed snapshots → source parsing →
-normalization → cross-source deduplication → authority-aware verification → deterministic
-fail-closed policy → explainable scoring → revision-checked SQLite state → redacted report.
-Exact approvals bind any mock submission to one job, recipient, payload, attachment set,
-and expiry.
+Creator's main model plans the beginner explanation, story, visual actions, pacing and sound. Bounded execution workers implement specified evidence/asset/scene packets. The main integrates artifacts, runs technical checks and reviews the encoded result. Voice is a shared procedure/driver that can also run independently.
+
+Brief → script/storyboard → owner approval → voice sample/review → measured narration → scene/assets/sound execution → real-audio proof/approval → full render → main review/fixes → owner final acceptance. Publishing remains separate.
+
+See [the detailed approach and diagram](VIDEO_PRODUCTION.md), [setup](VIDEO_SETUP.md) and [published sample gallery](VIDEO_SAMPLES.md). Private recordings, accounts and operational job state remain outside this public source package.

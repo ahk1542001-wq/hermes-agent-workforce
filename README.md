@@ -1,4 +1,4 @@
-# Hermes Agent Workforce — VIC Creator & Voice
+# VIC Creator & Voice — Hermes Video Production
 
 AI-assisted Burmese video production, directed by Victor. One Creator plans the story and coordinates bounded execution workers; a shared Voice procedure also runs independently.
 
@@ -17,10 +17,6 @@ This is a public-adapted export of an existing owner-local workflow, not a new a
 2. Configure two fresh Hermes profiles using [the profile installer](scripts/install_video_profiles.py); it refuses existing destinations and never configures authentication.
 3. Read the Creator or Voice README; choose the corresponding skill.
 4. Run `python3 scripts/verify_video.py` in an environment with NumPy and FFmpeg. Tests are offline and synthetic; they allocate no GPU and make no model calls.
-
-## Existing independent package
-
-[Job Scout](agents/job-scout/README.md) remains a separate package. It is not part of the Creator/Voice video pipeline. Its original Stage 3 network-free pilot and mock-only submission boundaries are unchanged. Existing whole-repository checks remain `./scripts/verify_all.sh`. Inspect its local feed-snapshot pilot from `agents/job-scout` with `uv run job-scout pilot-feed-discovery --help`.
 
 ## Attribution
 

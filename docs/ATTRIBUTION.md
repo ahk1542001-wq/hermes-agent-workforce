@@ -1,6 +1,5 @@
 # Attribution
 
-No upstream source code adapted in Stage 1–2.
+Victor designed the owner-directed Creator/Voice workflow, creative constraints and review process and directed AI-assisted implementation. Hermes is the host platform. Upstream engines, models and tools remain separately attributed and licensed.
 
-If that changes, the record must include repository URL, exact tag or commit, source
-file and lines, license, copied or adapted destination, and behavior changes before merge.
+See [video attribution and boundaries](VIDEO_ATTRIBUTION.md) and the retained licenses under `agents/vic-creator/notices`. No claim is made to authorship of Hermes, VoxCPM, AniDoodle, Huashu, HyperFrames, GSAP or FFmpeg. Media rights are distinct from source-code licenses.
