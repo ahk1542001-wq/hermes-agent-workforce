@@ -49,14 +49,38 @@ def find_text_violations(files: list[Path]) -> list[str]:
 
 def test_reachable_commit_emails_use_public_noreply_identity() -> None:
     result = subprocess.run(
-        ["git", "-C", str(ROOT), "log", "--format=%ae%n%ce"],
+        ["git", "-C", str(ROOT), "log", "--format=%ae%x00%ce"],
         check=True,
         capture_output=True,
         text=True,
     )
-    emails = [line.strip().lower() for line in result.stdout.splitlines() if line.strip()]
-    assert emails
-    assert all(email.endswith(("@users.noreply.github.com", "@example.com")) for email in emails)
+    identities = [line.lower().split("\0") for line in result.stdout.splitlines() if line.strip()]
+    assert identities
+    for author, committer in identities:
+        assert author.endswith(("@users.noreply.github.com", "@example.com"))
+        # GitHub signs reviewed PR merges using this public system identity.
+        assert committer.split("@") == ["noreply", "github.com"] or committer.endswith(
+            ("@users.noreply.github.com", "@example.com")
+        )
+
+
+def test_commit_privacy_check_accepts_only_public_roles(monkeypatch: pytest.MonkeyPatch) -> None:
+    public = "author@example.com"
+    system = "@".join(("noreply", "github.com"))
+    personal = "@".join(("person", "private.invalid"))
+    for author, committer, accepted in (
+        (public, public, True),
+        (public, system, True),
+        (personal, system, False),
+        (public, personal, False),
+    ):
+        result = subprocess.CompletedProcess([], 0, stdout=f"{author}\0{committer}\n")
+        monkeypatch.setattr(subprocess, "run", lambda *args, **kwargs: result)
+        if accepted:
+            test_reachable_commit_emails_use_public_noreply_identity()
+        else:
+            with pytest.raises(AssertionError):
+                test_reachable_commit_emails_use_public_noreply_identity()
 
 
 def test_root_level_forbidden_text_is_detected(tmp_path: Path) -> None:
