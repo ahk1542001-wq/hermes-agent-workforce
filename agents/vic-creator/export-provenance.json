@@ -1,0 +1,293 @@
+{
+  "description": "Allowlisted current Creator skill and standalone Voice code export. No personal recording, key, session or third-party art included. Source hashes capture pre-portability exports; final hashes recorded in release manifest checks.",
+  "files": [
+    {
+      "path": "agents/vic-creator/skills/vic-video/SKILL.md",
+      "sha256": "64161b8d28c6c44ce3b8cd57a6edfffd63b8eaf4ff1884e4b7ab64df55c8685c",
+      "source_sha256": "786cb3624efa044c6b953081cc82c7f2282fb86f813ef40d9b2a703c48521bd3",
+      "adaptation": "Public paths generalized; runtime executable portability changes documented separately."
+    },
+    {
+      "path": "agents/vic-creator/skills/vic-video/references/script-long.md",
+      "sha256": "38540357e009cc46c2a9e12da0138bc1b550ebf22b7f5d3726dbf3ec8c77d2ff",
+      "source_sha256": "38540357e009cc46c2a9e12da0138bc1b550ebf22b7f5d3726dbf3ec8c77d2ff",
+      "adaptation": "Public paths generalized; runtime executable portability changes documented separately."
+    },
+    {
+      "path": "agents/vic-creator/skills/vic-video/references/script-short.md",
+      "sha256": "acccd89a7d769286252a3a136db0cabd7cc968fbacfa7531037ca7cc49323d1d",
+      "source_sha256": "acccd89a7d769286252a3a136db0cabd7cc968fbacfa7531037ca7cc49323d1d",
+      "adaptation": "Public paths generalized; runtime executable portability changes documented separately."
+    },
+    {
+      "path": "agents/vic-creator/skills/vic-video/references/production-flow.md",
+      "sha256": "a1c0efe381c4ba5cd23e5049b5e1c171906fd74c2e02b96d619ae2758ec1b5fd",
+      "source_sha256": "a1c0efe381c4ba5cd23e5049b5e1c171906fd74c2e02b96d619ae2758ec1b5fd",
+      "adaptation": "Public paths generalized; runtime executable portability changes documented separately."
+    },
+    {
+      "path": "agents/vic-creator/skills/vic-video/references/script-core.md",
+      "sha256": "9d017c8a5b4c1537f85c4d82f3ef7ea451ce39b2436cc4c6a60e7c3cf575a394",
+      "source_sha256": "9d017c8a5b4c1537f85c4d82f3ef7ea451ce39b2436cc4c6a60e7c3cf575a394",
+      "adaptation": "Public paths generalized; runtime executable portability changes documented separately."
+    },
+    {
+      "path": "agents/vic-creator/skills/vic-video/tests/test_paper_timing.py",
+      "sha256": "1d6af2d1ec85d7d059639cb9fdda25e69564dae989228da50b5b900b176216d8",
+      "source_sha256": "1d6af2d1ec85d7d059639cb9fdda25e69564dae989228da50b5b900b176216d8",
+      "adaptation": "Public paths generalized; runtime executable portability changes documented separately."
+    },
+    {
+      "path": "agents/vic-creator/skills/vic-video/scripts/paper_timing.py",
+      "sha256": "01dd9938c835ed8701646aeb56d9a923fd60dcf92608c7362319b7e7a7df58f1",
+      "source_sha256": "01dd9938c835ed8701646aeb56d9a923fd60dcf92608c7362319b7e7a7df58f1",
+      "adaptation": "Public paths generalized; runtime executable portability changes documented separately."
+    },
+    {
+      "path": "agents/vic-creator/skills/vic-video/resources/spatial/references/polish.md",
+      "sha256": "54c8bcc3a8ce7bff42f4a84116ee3855518798d522fa6ce9cb3d4aebf3b52e87",
+      "source_sha256": "59d3e671348d413918b460e14aca56d98b8264b155cd16b437744d8c307df613",
+      "adaptation": "Public paths generalized; runtime executable portability changes documented separately."
+    },
+    {
+      "path": "agents/vic-creator/skills/vic-video/resources/cartoon/references/runtime.md",
+      "sha256": "f57dad7b8b0c08488ecdae386c415d09a85c13574172e17b8ab625b1efbd097f",
+      "source_sha256": "ad3ea7da9cedfa9a2cdf604b728da04e0cffbda6233fe81cc189211c6444d3fb",
+      "adaptation": "Public paths generalized; runtime executable portability changes documented separately."
+    },
+    {
+      "path": "agents/vic-creator/skills/vic-video/resources/cartoon/scripts/bind_narration.py",
+      "sha256": "8f00c5c648772f3747a921cf96f796cad0a65cec731a40fb79ad031bcf20f470",
+      "source_sha256": "8f00c5c648772f3747a921cf96f796cad0a65cec731a40fb79ad031bcf20f470",
+      "adaptation": "Public paths generalized; runtime executable portability changes documented separately."
+    },
+    {
+      "path": "agents/vic-creator/skills/vic-video/resources/short/references/sound-and-finishing.md",
+      "sha256": "a76a89748f9f86bdb9b00cc45cdaa7b143b028ed0f63001339d29f9e7a23b395",
+      "source_sha256": "a76a89748f9f86bdb9b00cc45cdaa7b143b028ed0f63001339d29f9e7a23b395",
+      "adaptation": "Public paths generalized; runtime executable portability changes documented separately."
+    },
+    {
+      "path": "agents/vic-creator/skills/vic-video/resources/short/references/style-visual-story.md",
+      "sha256": "e618950080fe0200f1414ed431213985175610983eba49b3493bc1777d2f3fac",
+      "source_sha256": "e618950080fe0200f1414ed431213985175610983eba49b3493bc1777d2f3fac",
+      "adaptation": "Public paths generalized; runtime executable portability changes documented separately."
+    },
+    {
+      "path": "agents/vic-creator/skills/vic-video/resources/short/references/reviewer-handoff.md",
+      "sha256": "6df2795ba7098791f52cbf5c114c10d24ef187d407a4376d1c0f65968d8e464f",
+      "source_sha256": "6df2795ba7098791f52cbf5c114c10d24ef187d407a4376d1c0f65968d8e464f",
+      "adaptation": "Public paths generalized; runtime executable portability changes documented separately."
+    },
+    {
+      "path": "agents/vic-creator/skills/vic-video/resources/short/references/vic-mini-animation.md",
+      "sha256": "9a75b4d8f3d9624f7a1b4913a291c79ffea2423134fbc9824100dad7d028cd4b",
+      "source_sha256": "9a75b4d8f3d9624f7a1b4913a291c79ffea2423134fbc9824100dad7d028cd4b",
+      "adaptation": "Public paths generalized; runtime executable portability changes documented separately."
+    },
+    {
+      "path": "agents/vic-creator/skills/vic-video/resources/short/references/visual-plan.md",
+      "sha256": "d5f6c4d910aa18c498660c0016f92851f0d3b1812658b553ec383da752ac78cb",
+      "source_sha256": "d5f6c4d910aa18c498660c0016f92851f0d3b1812658b553ec383da752ac78cb",
+      "adaptation": "Public paths generalized; runtime executable portability changes documented separately."
+    },
+    {
+      "path": "agents/vic-creator/skills/vic-video/resources/short/references/quality-and-resume.md",
+      "sha256": "210762f8eb66958fff2a825085b5b0557aeacfaa6159f26f5df692b18dd62d5a",
+      "source_sha256": "210762f8eb66958fff2a825085b5b0557aeacfaa6159f26f5df692b18dd62d5a",
+      "adaptation": "Public paths generalized; runtime executable portability changes documented separately."
+    },
+    {
+      "path": "agents/vic-creator/skills/vic-video/resources/short/references/explainer-motion.md",
+      "sha256": "b6cb192eec99fa0891d584abf4f72b9a52b9eb32bab2b58a81aca60cafe19e1e",
+      "source_sha256": "b6cb192eec99fa0891d584abf4f72b9a52b9eb32bab2b58a81aca60cafe19e1e",
+      "adaptation": "Public paths generalized; runtime executable portability changes documented separately."
+    },
+    {
+      "path": "agents/vic-creator/skills/vic-video/resources/short/references/production-flow.md",
+      "sha256": "8c64ef4a703ac9bdeab1614ea69c543179ce554cf06f3d250f73ac9ade2d0df5",
+      "source_sha256": "8c64ef4a703ac9bdeab1614ea69c543179ce554cf06f3d250f73ac9ade2d0df5",
+      "adaptation": "Public paths generalized; runtime executable portability changes documented separately."
+    },
+    {
+      "path": "agents/vic-creator/skills/vic-video/resources/short/references/character-motion.md",
+      "sha256": "24745dc000d77e546ccca987d2898d01af89c8d9faab6042eb8ad77bc81f84e7",
+      "source_sha256": "24745dc000d77e546ccca987d2898d01af89c8d9faab6042eb8ad77bc81f84e7",
+      "adaptation": "Public paths generalized; runtime executable portability changes documented separately."
+    },
+    {
+      "path": "agents/vic-creator/skills/vic-video/resources/short/references/style-ui-motion.md",
+      "sha256": "94ed02d971f37c252d4c7b858d8ecf273f468ad79769f55683a5b9ab921c1368",
+      "source_sha256": "94ed02d971f37c252d4c7b858d8ecf273f468ad79769f55683a5b9ab921c1368",
+      "adaptation": "Public paths generalized; runtime executable portability changes documented separately."
+    },
+    {
+      "path": "agents/vic-creator/skills/vic-video/resources/short/references/production-mechanics.md",
+      "sha256": "efba2d303877f9b803ebf2d1c597a8af6c470344a5e2372f8fad59824dc00b55",
+      "source_sha256": "2f4475b8ecfade7b1d5bc584d66a62d8314d4b3ff1fb1ee1da6ff702a2b5971d",
+      "adaptation": "Public paths generalized; runtime executable portability changes documented separately."
+    },
+    {
+      "path": "agents/vic-creator/skills/vic-video/resources/short/references/research-and-script.md",
+      "sha256": "3e082a652ff86ba06ceda1edd3bd9199347cf20dadef5f6bab852e7642e6c19b",
+      "source_sha256": "3e082a652ff86ba06ceda1edd3bd9199347cf20dadef5f6bab852e7642e6c19b",
+      "adaptation": "Public paths generalized; runtime executable portability changes documented separately."
+    },
+    {
+      "path": "agents/vic-creator/skills/vic-video/resources/short/scripts/render_job.py",
+      "sha256": "19a1af9fd5b8abab689e13b769deb85b998499be14ee3f43ad6706d6cc04f9b9",
+      "source_sha256": "6beca2cd55c03e202d00ea8e0acf4edceab31eb5f551c69c1c426d9f3a9f7b98",
+      "adaptation": "Public paths generalized; FFmpeg/FFprobe/Chrome selection configurable in exported renderer helpers."
+    },
+    {
+      "path": "agents/vic-creator/skills/vic-video/resources/short/scripts/deliver_job.py",
+      "sha256": "12987e93270b37f6641301169dc0b85189124eee55a983d2a71a244db3178186",
+      "source_sha256": "12987e93270b37f6641301169dc0b85189124eee55a983d2a71a244db3178186",
+      "adaptation": "Public paths generalized; FFmpeg/FFprobe/Chrome selection configurable in exported renderer helpers."
+    },
+    {
+      "path": "agents/vic-creator/skills/vic-video/resources/short/scripts/sound_mix.py",
+      "sha256": "5255cc66ad568e47b52fed04c8a8884e507e28ceffbed2f5d93df8002e132dfa",
+      "source_sha256": "fa51ee6dd37f5c4d8105bf835ba5b2c83277ff1a8b9f83e7f14ba8fe71f1ad61",
+      "adaptation": "Public paths generalized; FFmpeg/FFprobe/Chrome selection configurable in exported renderer helpers."
+    },
+    {
+      "path": "agents/vic-creator/skills/vic-video/resources/short/scripts/visual_ops.js",
+      "sha256": "926527df852b300457a276f61a5660df9651ff0571c3f7fca6e9ae522486c8f5",
+      "source_sha256": "926527df852b300457a276f61a5660df9651ff0571c3f7fca6e9ae522486c8f5",
+      "adaptation": "Public paths generalized; FFmpeg/FFprobe/Chrome selection configurable in exported renderer helpers."
+    },
+    {
+      "path": "agents/vic-creator/skills/vic-video/resources/short/scripts/test_presenter_layout.py",
+      "sha256": "44b8b799688a3fa22b2d50865bcfd26b689fa30bd891337c613e47c0e364afe9",
+      "source_sha256": "5d727c2c7ba717da1c3a31cc246a95fc6962552632446e9622e2354de2d38261",
+      "adaptation": "Personal asset-dependent tests replaced with temporary synthetic PNG geometry headers."
+    },
+    {
+      "path": "agents/vic-creator/skills/vic-video/resources/short/scripts/prepare_job.py",
+      "sha256": "19b4dd1ae812524203f61c1f946692b134dfbb81e315ef98c0c9a89b023db421",
+      "source_sha256": "0c4f4d9a369b7145f94e4ecaa52a1829d4c7d06e68cc399108fe916079172bc0",
+      "adaptation": "Public paths generalized; FFmpeg/FFprobe/Chrome selection configurable in exported renderer helpers."
+    },
+    {
+      "path": "agents/vic-creator/skills/vic-video/resources/short/scripts/check_job.py",
+      "sha256": "0abf035679dae8c3d5e2d59467f507c44e819c41e545582c87f5657d08fc42fe",
+      "source_sha256": "a6eae2cf634eec6efe746bd5eec70bc12544bc1a03ae4bf760df88c36871f352",
+      "adaptation": "Public paths generalized; FFmpeg/FFprobe/Chrome selection configurable in exported renderer helpers."
+    },
+    {
+      "path": "agents/vic-creator/skills/vic-video/resources/short/scripts/visual_contract.py",
+      "sha256": "3854d902797950fefa416f33746e753f22445ce27595c7423fa2c6d5b4dde083",
+      "source_sha256": "3854d902797950fefa416f33746e753f22445ce27595c7423fa2c6d5b4dde083",
+      "adaptation": "Public paths generalized; FFmpeg/FFprobe/Chrome selection configurable in exported renderer helpers."
+    },
+    {
+      "path": "agents/vic-creator/skills/vic-video/resources/short/scripts/cartoon_motion.js",
+      "sha256": "25c7b6bcada06a91040aeee2fc4691cc408151a97a9acbdfaee45569f84253c6",
+      "source_sha256": "25c7b6bcada06a91040aeee2fc4691cc408151a97a9acbdfaee45569f84253c6",
+      "adaptation": "Public paths generalized; FFmpeg/FFprobe/Chrome selection configurable in exported renderer helpers."
+    },
+    {
+      "path": "agents/vic-creator/skills/vic-video/resources/short/templates/renderer.html",
+      "sha256": "c15b1896e8a3da15df32de712a0711822e73c95881ce998f3db8c05fc6c36f12",
+      "source_sha256": "c15b1896e8a3da15df32de712a0711822e73c95881ce998f3db8c05fc6c36f12",
+      "adaptation": "Public paths generalized; runtime executable portability changes documented separately."
+    },
+    {
+      "path": "agents/vic-creator/skills/vic-video/references/styles/vic-lg-paperMotion.md",
+      "sha256": "baccb84f2acec51848a1c297fd41da6a8a2e2f67f59e5df24bb7f5d170f109e6",
+      "source_sha256": "4d584ca69809633977bbac605bf0313129e43698f8ebf03ea7163113154934d5",
+      "adaptation": "Public paths generalized; runtime executable portability changes documented separately."
+    },
+    {
+      "path": "agents/vic-creator/skills/vic-video/references/styles/vic-sh-uiMotion.md",
+      "sha256": "79dd7051728bf6898c2f0afd80731fb39432eb859bf65db0361f3b8eb559ae45",
+      "source_sha256": "79dd7051728bf6898c2f0afd80731fb39432eb859bf65db0361f3b8eb559ae45",
+      "adaptation": "Public paths generalized; runtime executable portability changes documented separately."
+    },
+    {
+      "path": "agents/vic-creator/skills/vic-video/references/styles/vic-lg-spatialMotion.md",
+      "sha256": "4e6be02c8aa2095df4a6b41f65f08ca510d6d6b1dbac16c975568b477f424096",
+      "source_sha256": "fa70e79b0cdfdcc002dba582a32b10d1c48abe9a23317c59a4b1e83b563d0783",
+      "adaptation": "Public paths generalized; runtime executable portability changes documented separately."
+    },
+    {
+      "path": "agents/vic-creator/skills/vic-video/references/styles/vic-sh-visualStory.md",
+      "sha256": "b6ac3b17b34bcdeef4c729467e362d8d960fe81ea77bd5c1fe547a12445e70f6",
+      "source_sha256": "b6ac3b17b34bcdeef4c729467e362d8d960fe81ea77bd5c1fe547a12445e70f6",
+      "adaptation": "Public paths generalized; runtime executable portability changes documented separately."
+    },
+    {
+      "path": "agents/vic-creator/skills/vic-video/references/styles/vic-lg-cartoonStory.md",
+      "sha256": "1b2a8c82727112eb45e82ed67ea7820ba8f9f7eddddfca79b7b48b187fddccf5",
+      "source_sha256": "29fb4f157052190539a362525dc9138efab1b38f5af3022a976aacfbcb98f259",
+      "adaptation": "Public paths generalized; runtime executable portability changes documented separately."
+    },
+    {
+      "path": "agents/vic-voice/skills/vic-voice-clone/SKILL.md",
+      "sha256": "1877adaff6603e3b99144489fc388665c50bfa170501a198928f2bd89fa868cb",
+      "source_sha256": "0d4e0c7bf54b966e750a86e9b6453805ff57273ec5a1b6ab403acdbd4a211d5c",
+      "adaptation": "Public paths generalized; runtime executable portability changes documented separately."
+    },
+    {
+      "path": "agents/vic-voice/skills/vic-voice-clone/references/cli-execution.md",
+      "sha256": "c269e32c9b47e7871b12928a8897dd88efa3a39807a98aebd90a6f1d5b91dc35",
+      "source_sha256": "c269e32c9b47e7871b12928a8897dd88efa3a39807a98aebd90a6f1d5b91dc35",
+      "adaptation": "Public paths generalized; runtime executable portability changes documented separately."
+    },
+    {
+      "path": "agents/vic-voice/skills/vic-voice-clone/scripts/deadline_runner.py",
+      "sha256": "84da603118825aaff1683f85a1b027d0c180493c01dc03717cb1977bd724765b",
+      "source_sha256": "84da603118825aaff1683f85a1b027d0c180493c01dc03717cb1977bd724765b",
+      "adaptation": "Public paths generalized; runtime executable portability changes documented separately."
+    },
+    {
+      "path": "agents/vic-voice/skills/vic-voice-clone/scripts/test_driver.py",
+      "sha256": "d00799f8cdb514b946b8d7e8b2a53bae1f1d0a8f7172b0c4cd0c35e848b6d5fe",
+      "source_sha256": "d00799f8cdb514b946b8d7e8b2a53bae1f1d0a8f7172b0c4cd0c35e848b6d5fe",
+      "adaptation": "Public paths generalized; runtime executable portability changes documented separately."
+    },
+    {
+      "path": "agents/vic-voice/skills/vic-voice-clone/scripts/assemble.py",
+      "sha256": "c9f812f599368aa3f9d2be6635b46a32a7397b34c3e375df60c9ba4c0e3497db",
+      "source_sha256": "c9f812f599368aa3f9d2be6635b46a32a7397b34c3e375df60c9ba4c0e3497db",
+      "adaptation": "Public paths generalized; runtime executable portability changes documented separately."
+    },
+    {
+      "path": "agents/vic-voice/skills/vic-voice-clone/scripts/synthesize.py",
+      "sha256": "2f19ab561b29683231a553b67fdbd7f6eabefe5905e2be979a5ce57a9b3a8b89",
+      "source_sha256": "2f19ab561b29683231a553b67fdbd7f6eabefe5905e2be979a5ce57a9b3a8b89",
+      "adaptation": "Public paths generalized; runtime executable portability changes documented separately."
+    },
+    {
+      "path": "agents/vic-voice/skills/vic-voice-clone/scripts/driver.py",
+      "sha256": "3e5bc56e9d4f080942703813afef43e5a7005bf99dfae193a17b171c3e489b2a",
+      "source_sha256": "3e5bc56e9d4f080942703813afef43e5a7005bf99dfae193a17b171c3e489b2a",
+      "adaptation": "Public paths generalized; runtime executable portability changes documented separately."
+    },
+    {
+      "path": "agents/vic-voice/skills/vic-voice-clone/scripts/remote_run.py",
+      "sha256": "41edd6ebe78b636b9c718aec5dc3bff3bf16298bd4a71ae42aa51ae512498cda",
+      "source_sha256": "41edd6ebe78b636b9c718aec5dc3bff3bf16298bd4a71ae42aa51ae512498cda",
+      "adaptation": "Public paths generalized; runtime executable portability changes documented separately."
+    },
+    {
+      "path": "agents/vic-voice/skills/vic-voice-clone/scripts/safe_diagnostics.py",
+      "sha256": "5919575c298aa8674e7c20380b634970c45cb1ec9caa0361c07687c7e1f10ede",
+      "source_sha256": "5919575c298aa8674e7c20380b634970c45cb1ec9caa0361c07687c7e1f10ede",
+      "adaptation": "Public paths generalized; runtime executable portability changes documented separately."
+    },
+    {
+      "path": "agents/vic-creator/skills/vic-video/resources/cartoon/assets/runtime/vicCartoonCamera.ts",
+      "sha256": "ba30ae3d874443a231ec0507f7c30b0afc7af7d2aa4de7366870efd5cef7435d",
+      "source_sha256": "ba30ae3d874443a231ec0507f7c30b0afc7af7d2aa4de7366870efd5cef7435d",
+      "adaptation": "Public paths generalized; runtime executable portability changes documented separately."
+    },
+    {
+      "path": "agents/vic-creator/skills/vic-video/resources/cartoon/assets/runtime/vicCartoonRig.ts",
+      "sha256": "6df5e26fb39166221d01d629de43ed6ab8818c2de3bcd2bc67dc98e0ebc02ef2",
+      "source_sha256": "6df5e26fb39166221d01d629de43ed6ab8818c2de3bcd2bc67dc98e0ebc02ef2",
+      "adaptation": "Public paths generalized; runtime executable portability changes documented separately."
+    }
+  ]
+}

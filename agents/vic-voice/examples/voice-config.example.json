@@ -1,0 +1,13 @@
+{
+  "example": "Synthetic placeholders; provide actual locally authorized inputs.",
+  "job_id": "my-narration",
+  "session": "my-voice-sample",
+  "mode": "sample",
+  "chunks": "/ABS/JOB/chunks.json",
+  "narration": "/ABS/JOB/narration-approved.txt",
+  "reference": "/ABS/PRIVATE/reference.m4a",
+  "authorization": "/ABS/JOB/authorization.json",
+  "sample_ids": [
+    "chunk_01"
+  ]
+}

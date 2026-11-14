@@ -1,0 +1,23 @@
+{
+  "example": "Provider-free role illustration; configure routes in your Hermes host, not by importing credentials.",
+  "main": {
+    "responsibilities": [
+      "research synthesis",
+      "script/storyboard",
+      "creative direction",
+      "integration",
+      "final review"
+    ],
+    "model": "YOUR_CONFIGURED_REASONING_MODEL"
+  },
+  "worker": {
+    "responsibilities": [
+      "specified evidence capture",
+      "approved scene implementation",
+      "sound execution"
+    ],
+    "model": "YOUR_CONFIGURED_EXECUTION_MODEL"
+  },
+  "parallelism": "Choose per dependency graph; exclusive owner for shared state",
+  "voice": "../vic-voice/skills/vic-voice-clone"
+}

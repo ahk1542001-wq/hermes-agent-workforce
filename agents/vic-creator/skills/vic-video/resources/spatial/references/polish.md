@@ -1,0 +1,12 @@
+# KAPE visual polish
+
+Choose techniques from the current lesson; do not turn these into a shot quota or a copied timeline.
+
+- **Show a change.** Specify what the viewer sees before the action, what changes and the readable result. For example, new input visibly changes the output rather than a DATA badge merely crossing the screen. The exact input/output/scene count is topic-specific.
+- **Explain structure with depth.** Use separated layers or an exploded view when the relationship between parts matters, then reassemble into a recognisable result. Keep material edges, contact/floating shadows and the light direction coherent; avoid a pile of decorated text cards.
+- **Direct the camera.** Establish the context, move closer to the action or relevant detail, then return when the relationship needs to be seen again. Allow still reading/result holds. Pan/orbit/parallax should guide attention; constant idle swivel is not explanation. Keep headings/captions screen-anchored when world-camera movement would harm reading, while object labels follow their own target.
+- **Carry a useful object across a cut.** Match its screen position, scale, state and appearance at the shared seam; give that seam one implementation owner. Preserve the visible relationship with source/destination. Do not replace the explanation with unrelated zooms or effects.
+- **Protect typography.** Declare the used local font faces inside each composition that names them; a linked stylesheet alone may not satisfy the composition linter. Keep Poppins/Myanmar fallback and measure the actual glyphs. Inspect moving packets against text throughout their path, not only at the final pose.
+- **Compare the current source.** Freeze source/font/asset hashes before reference capture. Any change invalidates affected reference screenshots. Compare exact frame indices with the final encoded export, inspect both sides of cuts and disclose the limits of sampled review. Investigate a failed comparison instead of lowering its threshold.
+
+Local mechanics example: `/opt/vic/runtimes/vic-landscape-explainer/proofs/kape-polish-20261025`. It demonstrates layer reassembly, sample-data replacement and a shared preview seam using existing narration. It is an illustrative regression example, not a new-topic template, actual Remotion execution, owner-approved replacement baseline or a native Hermes end-to-end qualification. For routine skill edits, inspect its source/receipts instead of rendering it again.

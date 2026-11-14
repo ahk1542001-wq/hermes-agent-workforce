@@ -1,0 +1,10 @@
+[
+  {
+    "id": "chunk_01",
+    "visible_text": "Example approved narration.",
+    "spoken_text": "Example approved narration.",
+    "est_s": 3,
+    "max_patches": 160,
+    "pause_ms": 180
+  }
+]

@@ -1,20 +1,27 @@
-# Hermes Agent Workforce
+# Hermes Agent Workforce — VIC Creator & Voice
 
-This is a **Stage 3 local, network-free pilot** for privacy-preserving agent packages.
-The current package is `agents/job-scout`.
+AI-assisted Burmese video production, directed by Victor. One Creator plans the story and coordinates bounded execution workers; a shared Voice procedure also runs independently.
 
-Architecture: sanitized policy context → public reusable code → private local state →
-future isolated Hermes execution. The implemented pipeline imports synthetic fixtures or
-local feed snapshots, normalizes and deduplicates listings, applies fail-closed policy,
-stores revision-checked state, ranks evidence, produces ATS-readable documents, and writes
-redacted reports. Submission remains mock-only and exact-approval gated.
+**[Watch the portfolio](https://portfolioweb-three-sigma.vercel.app/films) · [Creator setup](agents/vic-creator/README.md) · [Voice setup](agents/vic-voice/README.md) · [Interview walkthrough](docs/VIDEO_PRODUCTION.md)**
 
-Run `./scripts/verify_all.sh` or, inside `agents/job-scout`, `./scripts/verify.sh`.
-Run the synthetic demo with `uv run job-scout run-fixtures --fixtures
-tests/fixtures/jobs --db /tmp/job-scout.sqlite --report /tmp/job-scout.json`.
-Inspect the Stage 3 local feed-snapshot pilot with
-`uv run job-scout pilot-feed-discovery --help`.
+| Package | Responsibility | Published implementation |
+|---|---|---|
+| [VIC Creator](agents/vic-creator) | Research synthesis, scripting, storyboard, creative direction, worker packets, final review | Five-style skill, browser renderer, visual contract, sound mixer, timing helpers and runtime adapters |
+| [VIC Voice](agents/vic-voice) | Standalone or Creator narration | Shared Colab driver, VoxCPM synthesis, raw-chunk retrieval, assembly, measured timing, envelope and recovery tests |
 
-Not implemented: network discovery, Hermes runtime integration, Telegram, scheduler, live
-submitter, VPS, LinkedIn automation, income result, or ATS guarantee. No push or publication
-is performed by the build scripts.
+This is a public-adapted export of an existing owner-local workflow, not a new agent framework. Hermes is the host. Original voice references, credentials, account configuration, conversations and project jobs are excluded. Renderers need your own authorized media/fonts and the documented upstream runtimes. The instructions and source are available; a fresh-machine, unattended five-style run is not certified.
+
+## Start here
+
+1. Read [setup and boundaries](docs/VIDEO_SETUP.md).
+2. Configure two fresh Hermes profiles using [the profile installer](scripts/install_video_profiles.py); it refuses existing destinations and never configures authentication.
+3. Read the Creator or Voice README; choose the corresponding skill.
+4. Run `python3 scripts/verify_video.py` in an environment with NumPy and FFmpeg. Tests are offline and synthetic; they allocate no GPU and make no model calls.
+
+## Existing independent package
+
+[Job Scout](agents/job-scout/README.md) remains a separate package. It is not part of the Creator/Voice video pipeline. Its original Stage 3 network-free pilot and mock-only submission boundaries are unchanged. Existing whole-repository checks remain `./scripts/verify_all.sh`.
+
+## Attribution
+
+Victor designed the workflow, creative constraints and review process and directed AI-assisted implementation. Hermes, VoxCPM, Huashu, AniDoodle, HyperFrames, GSAP, Playwright and FFmpeg are upstream tools, not original frameworks authored by Victor. See [video attribution](docs/VIDEO_ATTRIBUTION.md).

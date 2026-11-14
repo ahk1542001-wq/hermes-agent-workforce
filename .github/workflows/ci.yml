@@ -21,3 +21,15 @@ jobs:
         run: ./scripts/verify_all.sh
       - name: Gitleaks
         uses: gitleaks/gitleaks-action@v2
+
+  video:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install numpy==2.4.6
+      - run: sudo apt-get update -qq && sudo apt-get install -y ffmpeg
+      - name: Offline Creator and Voice checks
+        run: python -B scripts/verify_video.py

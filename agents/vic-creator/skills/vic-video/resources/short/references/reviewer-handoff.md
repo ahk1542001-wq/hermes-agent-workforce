@@ -1,0 +1,5 @@
+# Main orchestrator review job
+
+After workers finish and the candidate is encoded, main GPT-6.1 Sol performs the final review as a job phase; no separate QA bot or subagent is required. Read current brief/style, approved text, exact encoded master/hash, shot/timing data and source/audio receipts. A worker's report is evidence to verify, not the verdict.
+
+Write actual per-shot before/action/result encoded observations, frame paths/times, factual/comprehension, layout, requested motion/anatomy, caption and audio/mouth checks. Record PASS/FAIL/not_verified honestly, inspected coverage and listening limits. Use role main-orchestrator-reviewer, review_phase post_render, and real reviewer_session; do not label main self-review independent. See visual-plan.md for the delivery schema. Repair only concrete defects; delegate bounded execution if useful, re-review the new exact hash and stop after two unsuccessful attempts per defect. Owner acceptance/publishing remain separate. Legacy independent reports remain supported but are not required by this workflow.
