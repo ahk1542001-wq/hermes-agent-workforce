@@ -48,7 +48,15 @@ with tempfile.TemporaryDirectory() as tmp, contextlib.redirect_stdout(io.StringI
         raise AssertionError('Overwrote existing profiles')
     assert installed.read_bytes() == before
     assert not any(p.name in ('config.yaml', '.env', 'auth.json') for p in profiles.rglob('*'))
+    module.install(profiles, Path(tmp) / 'runtimes', True, ('v-vic',))
+    public_skill = ROOT / 'agents/v-vic/skills/commercial-video/SKILL.md'
+    commercial_skill = profiles / 'v-vic/skills/commercial-video/SKILL.md'
+    assert commercial_skill.read_bytes() == public_skill.read_bytes()
+    subprocess.run(
+        ['sh', 'agents/v-vic/examples/render-example.sh', str(Path(tmp) / 'commercial-demo')],
+        cwd=ROOT, check=True,
+    )
     artifact = Path(tmp) / 'artifact'
     run('scripts/build_release.py', str(ROOT), str(artifact))
     run('scripts/verify_public_boundary.py', str(artifact), '--manifest', str(ROOT / 'release-manifest.json'))
-print('PASS: 29 regression tests; profile dry-run/install/no-overwrite/voice-link checks; exact release public-boundary scan. No live model, Colab or GPU calls.')
+print('PASS: 29 regression tests; profile dry-run/install/no-overwrite/voice-link checks; commercial install and synthetic export; exact release public-boundary scan. No live model, Colab or GPU calls.')
