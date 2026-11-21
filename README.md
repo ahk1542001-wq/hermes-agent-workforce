@@ -1,4 +1,4 @@
-# VIC Creator & Voice — Hermes Video Production
+# Hermes Video Production
 
 AI-assisted Burmese video production, directed by Victor. One Creator plans the story and coordinates bounded execution workers; a shared Voice procedure also runs independently.
 
@@ -10,6 +10,10 @@ AI-assisted Burmese video production, directed by Victor. One Creator plans the 
 | [VIC Voice](agents/vic-voice) | Standalone or Creator narration | Shared Colab driver, VoxCPM synthesis, raw-chunk retrieval, assembly, measured timing, envelope and recovery tests |
 
 This is a public-adapted export of an existing owner-local workflow, not a new agent framework. Hermes is the host. Original voice references, credentials, account configuration, conversations and project jobs are excluded. Renderers need your own authorized media/fonts and the documented upstream runtimes. The instructions and source are available; a fresh-machine, unattended five-style run is not certified.
+
+## Commercial films
+
+[v-vic](agents/v-vic/README.md) adds a separate commercial profile, an approval-led shot workflow and an offline example that renders and checks a short vertical cut.
 
 ## Start here
 
